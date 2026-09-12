@@ -1,0 +1,143 @@
+export type PopupTab = 'translate' | 'history' | 'dictionary' | 'settings';
+
+const brandIcon = `
+  <svg viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="currentColor" d="M9 36c0-5 4-9 10-10-5-1-7-5-5-9 1-4 5-6 9-5-2-3 0-7 4-9 1 5 5 6 8 9 2 3 1 5-1 7 5 1 9 4 9 9 0 4-3 7-5 8 2 1 3 4 3 6H10c-1-2-1-4-1-6Z"/>
+    <circle cx="21" cy="27" r="2.2" fill="#221b29"/><circle cx="32" cy="27" r="2.2" fill="#221b29"/>
+    <path d="M20 34c4 3 9 3 13 0" stroke="#221b29" stroke-width="2.3" stroke-linecap="round"/>
+  </svg>`;
+
+export function mountPopupShell(root: HTMLElement): void {
+  root.innerHTML = `
+    <main class="app-shell">
+      <header class="brand-header">
+        <div class="brand-mark">${brandIcon}</div>
+        <div class="brand-copy">
+          <h1>poop translator</h1>
+          <p>карманный переводчик</p>
+        </div>
+        <div class="engine-pill" data-engine-status title="Состояние локального переводчика">
+          <span class="engine-dot"></span><span>Проверяю</span>
+        </div>
+      </header>
+
+      <nav class="tab-bar" role="tablist" aria-label="Разделы">
+        <button role="tab" data-tab="translate" aria-selected="true">Перевод</button>
+        <button role="tab" data-tab="history" aria-selected="false">История</button>
+        <button role="tab" data-tab="dictionary" aria-selected="false">Словарь</button>
+        <button role="tab" data-tab="settings" aria-selected="false">Настройки</button>
+      </nav>
+
+      <div class="views">
+        <section class="view" data-view="translate" role="tabpanel">
+          <div class="language-row">
+            <label>Исходный язык
+              <select data-control="source-mode">
+                <option value="en">Английский</option>
+                <option value="auto">Авто</option>
+              </select>
+            </label>
+            <span class="language-arrow">→</span>
+            <div class="target-language"><small>Перевод</small><strong>Русский</strong></div>
+          </div>
+
+          <form class="translate-form" data-form="translate">
+            <label class="sr-only" for="source-text">Текст для перевода</label>
+            <textarea id="source-text" aria-label="Текст для перевода" maxlength="10000" placeholder="Напишите что-нибудь на английском…"></textarea>
+            <div class="composer-footer">
+              <span data-char-count>0 / 10 000</span>
+              <span class="enter-hint">Ctrl + Enter</span>
+            </div>
+            <button class="button button--hero" type="submit"><span>Перевести</span><span aria-hidden="true">↗</span></button>
+          </form>
+
+          <article class="result-card" data-result hidden>
+            <div class="result-head"><span>Результат</span><span data-result-language></span></div>
+            <p class="result-original" data-result-original></p>
+            <div class="result-divider"></div>
+            <p class="result-translation" data-result-translation></p>
+            <div class="result-actions">
+              <button class="button button--soft" type="button" data-action="copy-result">Копировать</button>
+              <button class="button button--accent" type="button" data-action="save-result">♡ В словарь</button>
+            </div>
+          </article>
+
+          <div class="inline-error" data-translate-error hidden></div>
+
+          <section class="page-tools">
+            <div><span class="section-kicker">Вся страница</span><p data-page-status>Переведу основной текст, сохранив кнопки и ссылки.</p></div>
+            <div class="page-actions">
+              <button class="button button--soft" type="button" data-action="translate-page">Перевести страницу</button>
+              <button class="icon-button" type="button" aria-label="Вернуть оригинал" title="Вернуть оригинал" data-action="restore-page">↶</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" data-view="history" role="tabpanel" hidden>
+          <div class="section-head"><div><span class="section-kicker">Недавнее</span><h2>История</h2></div><button class="text-button" type="button" data-action="clear-history">Очистить</button></div>
+          <label class="search-box"><span aria-hidden="true">⌕</span><input type="search" data-search="history" placeholder="Найти перевод" aria-label="Поиск в истории"></label>
+          <div class="item-list" data-history-list></div>
+        </section>
+
+        <section class="view" data-view="dictionary" role="tabpanel" hidden>
+          <div class="section-head"><div><span class="section-kicker">Мои слова</span><h2>Словарь</h2></div><button class="button button--accent button--small" type="button" data-action="add-word">+ Добавить</button></div>
+          <label class="search-box"><span aria-hidden="true">⌕</span><input type="search" data-search="dictionary" placeholder="Найти слово" aria-label="Поиск в словаре"></label>
+          <div class="item-list" data-dictionary-list></div>
+        </section>
+
+        <section class="view" data-view="settings" role="tabpanel" hidden>
+          <div class="section-head"><div><span class="section-kicker">Под себя</span><h2>Настройки</h2></div></div>
+          <div class="settings-group">
+            <label class="setting-row setting-row--stack"><span><strong>Исходный язык</strong><small>Основное направление — английский → русский</small></span>
+              <select data-control="settings-source-mode"><option value="en">Английский</option><option value="auto">Автоопределение</option></select>
+            </label>
+            <label class="setting-row"><span><strong>Сохранять историю</strong><small>Только ручные и выделенные переводы</small></span><input class="switch" type="checkbox" aria-label="Сохранять историю" data-control="save-history"></label>
+            <label class="setting-row"><span><strong>Кнопка у выделения</strong><small>Показывать маленького помощника на страницах</small></span><input class="switch" type="checkbox" aria-label="Показывать кнопку возле выделения" data-control="selection-button"></label>
+          </div>
+
+          <div class="engine-card">
+            <div class="engine-card__icon">${brandIcon}</div>
+            <div><strong>Локальный движок Chrome</strong><p data-engine-detail>Проверяю доступность…</p></div>
+            <button class="button button--soft button--small" type="button" data-action="prepare-engine">Подготовить</button>
+          </div>
+
+          <div class="danger-zone">
+            <span class="section-kicker">Данные на устройстве</span>
+            <button type="button" data-action="clear-history-settings"><span><strong>Очистить историю</strong><small>Словарь останется</small></span><span>›</span></button>
+            <button type="button" data-action="clear-dictionary"><span><strong>Очистить словарь</strong><small>История останется</small></span><span>›</span></button>
+            <button class="danger" type="button" data-action="clear-all"><span><strong>Сбросить все данные</strong><small>Вернуть начальные настройки</small></span><span>›</span></button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <dialog class="modal" data-word-modal>
+      <form method="dialog" data-form="word">
+        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" type="submit">✕</button></div>
+        <input type="hidden" data-word-id>
+        <label>Слово или фраза<input required maxlength="500" data-word-original></label>
+        <label>Перевод<input required maxlength="500" data-word-translation></label>
+        <label>Заметка <span>(необязательно)</span><textarea maxlength="1000" data-word-note></textarea></label>
+        <div class="modal-actions"><button class="button button--soft" value="cancel" type="submit">Отмена</button><button class="button button--accent" value="default" type="submit" data-word-save>Сохранить</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="modal modal--confirm" data-confirm-modal>
+      <form method="dialog">
+        <div class="confirm-icon">!</div><h2 data-confirm-title>Очистить данные?</h2><p data-confirm-text></p>
+        <div class="modal-actions"><button class="button button--soft" value="cancel">Отмена</button><button class="button button--danger" value="confirm" data-confirm-button>Очистить</button></div>
+      </form>
+    </dialog>
+    <div class="toast" data-toast hidden></div>`;
+}
+
+export function activateTab(root: ParentNode, tab: PopupTab): void {
+  root.querySelectorAll<HTMLElement>('[data-tab]').forEach((element) => {
+    const selected = element.dataset.tab === tab;
+    element.setAttribute('aria-selected', String(selected));
+    element.tabIndex = selected ? 0 : -1;
+  });
+  root.querySelectorAll<HTMLElement>('[data-view]').forEach((element) => {
+    element.hidden = element.dataset.view !== tab;
+  });
+}
