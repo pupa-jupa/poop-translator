@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChromeTranslator, TranslationEngineError } from '../src/core/translator';
+import { translateFromUserActivation } from '../src/core/user-activated-translation';
 
 function fakeTranslatorApi(options?: { availability?: string; translated?: string }) {
   return {
@@ -77,6 +78,43 @@ describe('ChromeTranslator', () => {
     expect(translatorApi.create).toHaveBeenCalledOnce();
     expect(detectorApi.create).toHaveBeenCalledOnce();
     await preparation;
+  });
+
+  it('starts both downloadable auto-mode components during the selection click', async () => {
+    let releaseTranslator: (() => void) | undefined;
+    let releaseDetector: (() => void) | undefined;
+    const translated = vi.fn(async () => 'Длинное английское предложение');
+    const detected = vi.fn(async () => [{ detectedLanguage: 'en', confidence: 0.99 }]);
+    const translatorApi = {
+      availability: vi.fn(async () => 'downloadable'),
+      create: vi.fn(() => new Promise<{ translate: typeof translated; destroy: () => void }>((resolve) => {
+        releaseTranslator = () => resolve({ translate: translated, destroy: () => undefined });
+      })),
+    };
+    const detectorApi = {
+      availability: vi.fn(async () => 'downloadable'),
+      create: vi.fn(() => new Promise<{ detect: typeof detected; destroy: () => void }>((resolve) => {
+        releaseDetector = () => resolve({ detect: detected, destroy: () => undefined });
+      })),
+    };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
+
+    const pending = translateFromUserActivation(
+      engine,
+      'A long English sentence selected on the page.',
+      'auto',
+    );
+
+    expect(translatorApi.create).toHaveBeenCalledOnce();
+    expect(detectorApi.create).toHaveBeenCalledOnce();
+    expect(detected).not.toHaveBeenCalled();
+    releaseTranslator?.();
+    releaseDetector?.();
+
+    await expect(pending).resolves.toMatchObject({
+      translation: 'Длинное английское предложение',
+      sourceLanguage: 'en',
+    });
   });
 
   it('returns Russian text unchanged when auto detection is confident', async () => {

@@ -3,6 +3,7 @@ import { PageTranslationSession, findMainContent } from './core/page-translation
 import { STORAGE_KEY } from './core/storage';
 import { getStorageClient } from './core/storage-client';
 import { ChromeTranslator } from './core/translator';
+import { translateFromUserActivation } from './core/user-activated-translation';
 import { createRequestId, isContentRequest, type PageStatus, type RuntimeResponse } from './shared/messages';
 import type { Settings, SourceMode, TranslationResult, TranslationSource } from './shared/types';
 
@@ -174,7 +175,7 @@ async function showTranslationCard(
     view.status.innerHTML = '<span class="pt-spinner"></span><span>Готовлю переводчик…</span>';
     view.actions.replaceChildren();
     try {
-      const result = await engine.translate(text, settings.sourceMode, {
+      const result = await translateFromUserActivation(engine, text, settings.sourceMode, {
         onProgress(percent) {
           const label = view.status.querySelector('span:last-child');
           if (label) label.textContent = `Загружаю языковой пакет: ${percent}%`;
