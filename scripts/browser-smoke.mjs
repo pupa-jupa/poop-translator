@@ -5,11 +5,9 @@ import { chromium } from 'playwright';
 
 const extensionPath = resolve('dist');
 const profileRoot = resolve('.tmp-chrome-profile-playwright');
-const outputPath = resolve('output/playwright');
 await mkdir(profileRoot, { recursive: true });
 const profilePath = await mkdtemp(join(profileRoot, 'run-'));
 if (!profilePath.startsWith(`${profileRoot}${sep}`)) throw new Error('Unsafe browser profile path');
-await mkdir(outputPath, { recursive: true });
 
 const server = createServer((_request, response) => {
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
@@ -76,7 +74,7 @@ try {
   if (!await popup.locator('[data-view="settings"]').isVisible()) throw new Error('Settings tab did not open');
   await popup.locator('[data-tab="translate"]').click();
   await popup.waitForTimeout(250);
-  await popup.screenshot({ path: resolve(outputPath, 'poop-translator-popup.png') });
+  await popup.screenshot({ path: join(profilePath, 'poop-translator-popup.png') });
 
   if (process.env.POOP_TRANSLATION_SMOKE === '1') {
     await popup.locator('#source-text').fill('Hello, how are you?');
