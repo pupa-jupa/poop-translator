@@ -109,6 +109,19 @@ export class ChromeTranslator {
     }
   }
 
+  private withCreationTimeout<T>(creation: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new TranslationEngineError(
+        'DOWNLOAD_FAILED',
+        'Подготовка переводчика заняла слишком много времени. Нажмите «Повторить».',
+      )), this.creationTimeoutMs);
+    });
+    return Promise.race([creation, timeout]).finally(() => {
+      if (timer !== undefined) clearTimeout(timer);
+    });
+  }
+
   private createTranslator(sourceLanguage: string, callbacks: TranslationCallbacks): Promise<TranslatorInstanceLike> {
     const api = this.environment.Translator;
     if (!api) {
@@ -132,16 +145,7 @@ export class ChromeTranslator {
         });
       },
     });
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new TranslationEngineError(
-        'DOWNLOAD_FAILED',
-        'Подготовка переводчика заняла слишком много времени. Нажмите «Повторить».',
-      )), this.creationTimeoutMs);
-    });
-    const creation = Promise.race([modelCreation, timeout]).finally(() => {
-      if (timer !== undefined) clearTimeout(timer);
-    }).catch((error) => {
+    const creation = this.withCreationTimeout(modelCreation).catch((error) => {
       this.translators.delete(sourceLanguage);
       throw messageForCreationError(error);
     });
@@ -153,14 +157,16 @@ export class ChromeTranslator {
   private createDetector(callbacks: TranslationCallbacks): Promise<DetectorInstanceLike> | undefined {
     const api = this.environment.LanguageDetector;
     if (!api) return undefined;
-    this.detector ??= api.create({
+    if (this.detector) return this.detector;
+    const modelCreation = api.create({
       expectedInputLanguages: ['en', 'ru'],
       monitor(monitor) {
         monitor.addEventListener('downloadprogress', (event) => {
           callbacks.onProgress?.(Math.round(Math.max(0, Math.min(1, event.loaded)) * 100));
         });
       },
-    }).catch((error) => {
+    });
+    this.detector = this.withCreationTimeout(modelCreation).catch((error) => {
       this.detector = undefined;
       throw error;
     });
@@ -169,6 +175,21 @@ export class ChromeTranslator {
 
   async prepare(sourceLanguage = 'en', callbacks: TranslationCallbacks = {}): Promise<void> {
     await this.createTranslator(sourceLanguage, callbacks);
+  }
+
+  async prepareForMode(sourceMode: SourceMode, callbacks: TranslationCallbacks = {}): Promise<void> {
+    // Both create calls happen before the first await, while transient user
+    // activation from the button click is still available.
+    const preparations: Array<Promise<unknown>> = [this.createTranslator('en', callbacks)];
+    if (sourceMode === 'auto') {
+      const detector = this.createDetector(callbacks);
+      if (detector) preparations.push(detector);
+    }
+    try {
+      await Promise.all(preparations);
+    } catch (error) {
+      throw messageForCreationError(error);
+    }
   }
 
   private async detectSource(text: string, callbacks: TranslationCallbacks): Promise<string> {

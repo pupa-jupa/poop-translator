@@ -68,4 +68,21 @@ describe('PageTranslationSession', () => {
     expect(calls).toBe(1);
     expect(document.querySelector('main')?.textContent).toBe('One.Two.');
   });
+
+  it('does not overwrite a node changed by the site while translation is pending', async () => {
+    document.body.innerHTML = '<main><p>Hello.</p></main>';
+    const node = document.querySelector('p')!.firstChild as Text;
+    const session = new PageTranslationSession();
+    let release: ((value: string) => void) | undefined;
+
+    const pending = session.translate(document.querySelector('main')!, () => new Promise((resolve) => {
+      release = resolve;
+    }));
+    node.data = 'Fresh site content.';
+    release?.('Привет.');
+    await pending;
+
+    expect(node.data).toBe('Fresh site content.');
+    expect(session.translatedNodeCount).toBe(0);
+  });
 });

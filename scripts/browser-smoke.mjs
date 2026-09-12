@@ -1,12 +1,14 @@
 import { createServer } from 'node:http';
-import { mkdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { join, resolve, sep } from 'node:path';
 import { chromium } from 'playwright';
 
 const extensionPath = resolve('dist');
-const profilePath = resolve('.tmp-chrome-profile-playwright');
+const profileRoot = resolve('.tmp-chrome-profile-playwright');
 const outputPath = resolve('output/playwright');
-await mkdir(profilePath, { recursive: true });
+await mkdir(profileRoot, { recursive: true });
+const profilePath = await mkdtemp(join(profileRoot, 'run-'));
+if (!profilePath.startsWith(`${profileRoot}${sep}`)) throw new Error('Unsafe browser profile path');
 await mkdir(outputPath, { recursive: true });
 
 const server = createServer((_request, response) => {
@@ -33,6 +35,8 @@ try {
   let worker = context.serviceWorkers()[0];
   worker ??= await context.waitForEvent('serviceworker', { timeout: 15_000 });
   const extensionId = new URL(worker.url()).host;
+  const workerMessages = [];
+  worker.on('console', (message) => workerMessages.push(`${message.type()}: ${message.text()}`));
   const popup = await context.newPage();
   const errors = [];
   popup.on('pageerror', (error) => errors.push(error.message));
@@ -49,6 +53,25 @@ try {
   }
   await popup.locator('[data-tab="dictionary"]').click();
   if (!await popup.locator('[data-view="dictionary"]').isVisible()) throw new Error('Dictionary tab did not open');
+  const smokeWord = `smoke-${Date.now()}`;
+  await worker.evaluate(() => chrome.runtime.id);
+  await popup.locator('[data-action="add-word"]').click();
+  await popup.locator('[data-word-original]').fill(smokeWord);
+  await popup.locator('[data-word-translation]').fill('проверка');
+  await popup.locator('[data-word-save]').click();
+  const storedCard = popup.locator('.item-card', { hasText: smokeWord });
+  try {
+    await storedCard.waitFor({ timeout: 5_000 });
+  } catch {
+    const diagnostics = await popup.evaluate(async () => ({
+      toast: document.querySelector('[data-toast]')?.textContent,
+      dialogOpen: document.querySelector('[data-word-modal]')?.hasAttribute('open'),
+      storage: await chrome.storage.local.get(),
+    }));
+    throw new Error(`Dictionary RPC failed: ${JSON.stringify(diagnostics)}; worker=${worker.url()}; workerConsole=${workerMessages.join(' | ')}; console=${errors.join(' | ')}`);
+  }
+  await storedCard.getByRole('button', { name: 'Удалить' }).click();
+  await storedCard.waitFor({ state: 'detached' });
   await popup.locator('[data-tab="settings"]').click();
   if (!await popup.locator('[data-view="settings"]').isVisible()) throw new Error('Settings tab did not open');
   await popup.locator('[data-tab="translate"]').click();
@@ -84,10 +107,28 @@ try {
   }
   if (!await page.locator('#site-button').isEnabled()) throw new Error('Page interaction was damaged');
 
+  const tabId = await worker.evaluate(async (url) => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.find((tab) => tab.url === url)?.id;
+  }, page.url());
+  if (!tabId) throw new Error('Could not resolve the test page tab');
+  await worker.evaluate(async (id) => {
+    await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-1', sourceMode: 'en' });
+    await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-2', sourceMode: 'en' });
+  }, tabId);
+  if (await page.locator('[data-poop-translator-root] .pt-page-prompt').count() !== 1) {
+    throw new Error('Overlapping page requests created more than one confirmation prompt');
+  }
+  await worker.evaluate((id) => chrome.tabs.sendMessage(id, {
+    type: 'RESTORE_PAGE', requestId: 'pt-smoke-restore',
+  }), tabId);
+  await page.locator('[data-poop-translator-root] .pt-page-prompt').waitFor({ state: 'detached' });
+
   if (errors.length) throw new Error(`Popup console errors: ${errors.join(' | ')}`);
   const translatorType = await popup.evaluate(() => typeof globalThis.Translator);
   console.log(JSON.stringify({ extensionId, tabs: tabNames.length, selectionButton: true, translatorType }, null, 2));
 } finally {
   await context.close();
   await new Promise((resolveServer) => server.close(resolveServer));
+  await rm(profilePath, { recursive: true, force: true });
 }

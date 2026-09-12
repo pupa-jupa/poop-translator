@@ -22,14 +22,14 @@ export function mountPopupShell(root: HTMLElement): void {
       </header>
 
       <nav class="tab-bar" role="tablist" aria-label="Разделы">
-        <button role="tab" data-tab="translate" aria-selected="true">Перевод</button>
-        <button role="tab" data-tab="history" aria-selected="false">История</button>
-        <button role="tab" data-tab="dictionary" aria-selected="false">Словарь</button>
-        <button role="tab" data-tab="settings" aria-selected="false">Настройки</button>
+        <button id="tab-translate" role="tab" data-tab="translate" aria-controls="panel-translate" aria-selected="true" tabindex="0">Перевод</button>
+        <button id="tab-history" role="tab" data-tab="history" aria-controls="panel-history" aria-selected="false" tabindex="-1">История</button>
+        <button id="tab-dictionary" role="tab" data-tab="dictionary" aria-controls="panel-dictionary" aria-selected="false" tabindex="-1">Словарь</button>
+        <button id="tab-settings" role="tab" data-tab="settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Настройки</button>
       </nav>
 
       <div class="views">
-        <section class="view" data-view="translate" role="tabpanel">
+        <section id="panel-translate" class="view" data-view="translate" role="tabpanel" aria-labelledby="tab-translate">
           <div class="language-row">
             <label>Исходный язык
               <select data-control="source-mode">
@@ -62,10 +62,10 @@ export function mountPopupShell(root: HTMLElement): void {
             </div>
           </article>
 
-          <div class="inline-error" data-translate-error hidden></div>
+          <div class="inline-error" data-translate-error role="alert" hidden></div>
 
           <section class="page-tools">
-            <div><span class="section-kicker">Вся страница</span><p data-page-status>Переведу основной текст, сохранив кнопки и ссылки.</p></div>
+            <div><span class="section-kicker">Вся страница</span><p data-page-status aria-live="polite">Переведу основной текст, сохранив кнопки и ссылки.</p></div>
             <div class="page-actions">
               <button class="button button--soft" type="button" data-action="translate-page">Перевести страницу</button>
               <button class="icon-button" type="button" aria-label="Вернуть оригинал" title="Вернуть оригинал" data-action="restore-page">↶</button>
@@ -73,19 +73,19 @@ export function mountPopupShell(root: HTMLElement): void {
           </section>
         </section>
 
-        <section class="view" data-view="history" role="tabpanel" hidden>
+        <section id="panel-history" class="view" data-view="history" role="tabpanel" aria-labelledby="tab-history" hidden>
           <div class="section-head"><div><span class="section-kicker">Недавнее</span><h2>История</h2></div><button class="text-button" type="button" data-action="clear-history">Очистить</button></div>
           <label class="search-box"><span aria-hidden="true">⌕</span><input type="search" data-search="history" placeholder="Найти перевод" aria-label="Поиск в истории"></label>
           <div class="item-list" data-history-list></div>
         </section>
 
-        <section class="view" data-view="dictionary" role="tabpanel" hidden>
+        <section id="panel-dictionary" class="view" data-view="dictionary" role="tabpanel" aria-labelledby="tab-dictionary" hidden>
           <div class="section-head"><div><span class="section-kicker">Мои слова</span><h2>Словарь</h2></div><button class="button button--accent button--small" type="button" data-action="add-word">+ Добавить</button></div>
           <label class="search-box"><span aria-hidden="true">⌕</span><input type="search" data-search="dictionary" placeholder="Найти слово" aria-label="Поиск в словаре"></label>
           <div class="item-list" data-dictionary-list></div>
         </section>
 
-        <section class="view" data-view="settings" role="tabpanel" hidden>
+        <section id="panel-settings" class="view" data-view="settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
           <div class="section-head"><div><span class="section-kicker">Под себя</span><h2>Настройки</h2></div></div>
           <div class="settings-group">
             <label class="setting-row setting-row--stack"><span><strong>Исходный язык</strong><small>Основное направление — английский → русский</small></span>
@@ -128,7 +128,7 @@ export function mountPopupShell(root: HTMLElement): void {
         <div class="modal-actions"><button class="button button--soft" value="cancel">Отмена</button><button class="button button--danger" value="confirm" data-confirm-button>Очистить</button></div>
       </form>
     </dialog>
-    <div class="toast" data-toast hidden></div>`;
+    <div class="toast" data-toast role="status" aria-live="polite" hidden></div>`;
 }
 
 export function activateTab(root: ParentNode, tab: PopupTab): void {

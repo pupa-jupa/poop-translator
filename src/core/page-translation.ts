@@ -7,7 +7,8 @@ function isSkippedElement(element: Element | null): boolean {
     if (SKIPPED_TAGS.has(current.tagName)) return true;
     if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
     if (current.hasAttribute('data-poop-translator-root')) return true;
-    if (current.matches('[contenteditable=""], [contenteditable="true"]')) return true;
+    const editable = current.getAttribute('contenteditable');
+    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
     const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
     if (style?.display === 'none' || style?.visibility === 'hidden') return true;
   }
@@ -136,8 +137,10 @@ export class PageTranslationSession {
           translatedParts.push(translatedPart);
         }
         const translated = `${leading}${translatedParts.join(' ')}${trailing}`;
-        node.data = translated;
-        this.snapshots.set(node, { original, translated });
+        if (node.isConnected && node.data === original) {
+          node.data = translated;
+          this.snapshots.set(node, { original, translated });
+        }
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') throw error;
         failed += 1;

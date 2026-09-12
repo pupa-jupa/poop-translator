@@ -1,12 +1,13 @@
 import contentStyles from './content.css?inline';
 import { PageTranslationSession, findMainContent } from './core/page-translation';
-import { getStorageRepository, STORAGE_KEY } from './core/storage';
-import { ChromeTranslator, TranslationEngineError } from './core/translator';
+import { STORAGE_KEY } from './core/storage';
+import { getStorageClient } from './core/storage-client';
+import { ChromeTranslator } from './core/translator';
 import { createRequestId, isContentRequest, type PageStatus, type RuntimeResponse } from './shared/messages';
 import type { Settings, SourceMode, TranslationResult, TranslationSource } from './shared/types';
 
 const engine = new ChromeTranslator();
-const repository = getStorageRepository();
+const repository = getStorageClient();
 let settings: Settings = { sourceMode: 'en', saveHistory: true, showSelectionButton: true };
 let host: HTMLDivElement | undefined;
 let layer: HTMLDivElement | undefined;
@@ -18,6 +19,7 @@ let selectedRect: DOMRect | undefined;
 let pageSession = new PageTranslationSession();
 let pageAbort: AbortController | undefined;
 let pageStatus: PageStatus = { state: 'idle', completed: 0, total: 0 };
+let pageOperationId = 0;
 
 const poopSvg = `
   <svg class="pt-mini-poop" viewBox="0 0 48 48" aria-hidden="true">
@@ -64,6 +66,8 @@ function closeCard(): void {
 function showToast(message: string): void {
   const toast = document.createElement('div');
   toast.className = 'pt-toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
   toast.textContent = message;
   ensureLayer().append(toast);
   window.setTimeout(() => toast.remove(), 1800);
@@ -124,7 +128,7 @@ function cardShell(original: string, rect?: DOMRect): {
     <p class="pt-copy pt-original"></p>
     <div class="pt-divider"></div>
     <p class="pt-label">Перевод</p>
-    <div class="pt-status"><span class="pt-spinner"></span><span>Готовлю переводчик…</span></div>
+    <div class="pt-status" role="status" aria-live="polite"><span class="pt-spinner"></span><span>Готовлю переводчик…</span></div>
     <p class="pt-copy pt-translation" hidden></p>
     <div class="pt-actions"></div>`;
   element.querySelector<HTMLParagraphElement>('.pt-original')!.textContent = original;
@@ -226,6 +230,9 @@ function dismissPagePrompt(): void {
 }
 
 function showPagePrompt(sourceMode: SourceMode): void {
+  const operationId = ++pageOperationId;
+  pageAbort?.abort();
+  pageSession.restore();
   dismissPagePrompt();
   const prompt = document.createElement('div');
   prompt.className = 'pt-page-prompt';
@@ -238,17 +245,23 @@ function showPagePrompt(sourceMode: SourceMode): void {
   const start = makeButton('Начать', 'pt-button pt-button--primary');
   cancel.addEventListener('click', () => {
     dismissPagePrompt();
-    setPageStatus({ state: 'idle', completed: 0, total: 0 });
+    if (operationId === pageOperationId) setPageStatus({ state: 'idle', completed: 0, total: 0 });
   });
   start.addEventListener('click', () => {
+    const session = new PageTranslationSession();
+    const controller = new AbortController();
+    pageSession = session;
+    pageAbort = controller;
     // Start model creation before the first await to preserve activation.
-    const preparation = engine.prepare('en', {
+    const preparation = engine.prepareForMode(sourceMode, {
       onProgress(percent) {
-        setPageStatus({ state: 'translating', completed: percent, total: 100 });
+        if (operationId === pageOperationId) {
+          setPageStatus({ state: 'translating', completed: percent, total: 100 });
+        }
       },
     });
     dismissPagePrompt();
-    void runPageTranslation(sourceMode, preparation);
+    void runPageTranslation(sourceMode, preparation, operationId, session, controller);
   });
   buttons.append(cancel, start);
   ensureLayer().append(prompt);
@@ -256,20 +269,26 @@ function showPagePrompt(sourceMode: SourceMode): void {
   setPageStatus({ state: 'awaiting-activation', completed: 0, total: 0 });
 }
 
-async function runPageTranslation(sourceMode: SourceMode, preparation: Promise<void>): Promise<void> {
-  pageAbort?.abort();
-  pageSession.restore();
-  pageSession = new PageTranslationSession();
-  pageAbort = new AbortController();
+async function runPageTranslation(
+  sourceMode: SourceMode,
+  preparation: Promise<void>,
+  operationId: number,
+  session: PageTranslationSession,
+  controller: AbortController,
+): Promise<void> {
   setPageStatus({ state: 'translating', completed: 0, total: 0 });
   try {
     await preparation;
-    const summary = await pageSession.translate(
+    if (operationId !== pageOperationId || controller.signal.aborted) return;
+    const summary = await session.translate(
       findMainContent(),
       async (text) => (await engine.translate(text, sourceMode)).translation,
-      (completed, total) => setPageStatus({ state: 'translating', completed, total }),
-      pageAbort.signal,
+      (completed, total) => {
+        if (operationId === pageOperationId) setPageStatus({ state: 'translating', completed, total });
+      },
+      controller.signal,
     );
+    if (operationId !== pageOperationId) return;
     setPageStatus({
       state: 'translated',
       completed: summary.completed,
@@ -278,7 +297,7 @@ async function runPageTranslation(sourceMode: SourceMode, preparation: Promise<v
     });
     showToast(summary.failed ? 'Страница переведена частично' : 'Страница переведена');
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') return;
+    if (operationId !== pageOperationId || (error instanceof DOMException && error.name === 'AbortError')) return;
     setPageStatus({
       state: 'error',
       completed: pageStatus.completed,
@@ -290,6 +309,7 @@ async function runPageTranslation(sourceMode: SourceMode, preparation: Promise<v
 }
 
 function restorePage(): PageStatus {
+  pageOperationId += 1;
   pageAbort?.abort();
   dismissPagePrompt();
   const restored = pageSession.restore();
@@ -301,7 +321,7 @@ function restorePage(): PageStatus {
 function selectionIsEditable(selection: Selection): boolean {
   const node = selection.anchorNode;
   const element = node instanceof Element ? node : node?.parentElement;
-  return Boolean(element?.closest('input, textarea, [contenteditable=""], [contenteditable="true"]'));
+  return Boolean(element?.closest('input, textarea, [contenteditable]:not([contenteditable="false"])'));
 }
 
 document.addEventListener('mouseup', (event) => {

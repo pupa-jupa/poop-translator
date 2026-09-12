@@ -65,6 +65,20 @@ describe('ChromeTranslator', () => {
     expect(api.create).toHaveBeenCalledOnce();
   });
 
+  it('starts language detection synchronously when preparing auto mode', async () => {
+    const translatorApi = fakeTranslatorApi();
+    const detectorApi = {
+      availability: vi.fn(async () => 'downloadable'),
+      create: vi.fn(async () => ({ detect: vi.fn(), destroy: vi.fn() })),
+    };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
+
+    const preparation = engine.prepareForMode('auto');
+    expect(translatorApi.create).toHaveBeenCalledOnce();
+    expect(detectorApi.create).toHaveBeenCalledOnce();
+    await preparation;
+  });
+
   it('returns Russian text unchanged when auto detection is confident', async () => {
     const translatorApi = fakeTranslatorApi();
     const detectorApi = {
@@ -119,6 +133,25 @@ describe('ChromeTranslator', () => {
         code: 'DOWNLOAD_FAILED',
         message: 'Подготовка переводчика заняла слишком много времени. Нажмите «Повторить».',
       });
+      await vi.advanceTimersByTimeAsync(1_000);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out a detector download that never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const translatorApi = fakeTranslatorApi();
+      const detectorApi = {
+        availability: vi.fn(async () => 'downloadable'),
+        create: vi.fn(() => new Promise<never>(() => undefined)),
+      };
+      const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi }, 1_000);
+
+      const preparation = engine.prepareForMode('auto');
+      const rejection = expect(preparation).rejects.toMatchObject({ code: 'DOWNLOAD_FAILED' });
       await vi.advanceTimersByTimeAsync(1_000);
       await rejection;
     } finally {

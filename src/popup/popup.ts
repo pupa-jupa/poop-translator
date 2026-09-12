@@ -1,5 +1,6 @@
 import './popup.css';
-import { getStorageRepository, STORAGE_KEY } from '../core/storage';
+import { STORAGE_KEY } from '../core/storage';
+import { getStorageClient } from '../core/storage-client';
 import { ChromeTranslator } from '../core/translator';
 import { createRequestId, type PageStatus, type RuntimeResponse } from '../shared/messages';
 import type { DictionaryEntry, ExtensionState, HistoryEntry, SourceMode, TranslationResult } from '../shared/types';
@@ -14,7 +15,7 @@ function required<T extends Element>(selector: string): T {
   return element;
 }
 
-const repository = getStorageRepository();
+const repository = getStorageClient();
 const engine = new ChromeTranslator();
 let state: ExtensionState;
 let latestResult: TranslationResult | undefined;
@@ -270,6 +271,23 @@ root.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
     activateTab(root, tab.dataset.tab as PopupTab);
     window.scrollTo({ top: 0, behavior: 'instant' });
   });
+  tab.addEventListener('keydown', (event) => {
+    const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const current = tabs.indexOf(tab);
+    const next = event.key === 'ArrowRight'
+      ? (current + 1) % tabs.length
+      : event.key === 'ArrowLeft'
+        ? (current - 1 + tabs.length) % tabs.length
+        : event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? tabs.length - 1
+            : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    tabs[next]?.click();
+    tabs[next]?.focus();
+  });
 });
 
 sourceText.addEventListener('input', () => {
@@ -292,7 +310,7 @@ translateForm.addEventListener('submit', (event) => {
     return;
   }
   // Start creation synchronously inside submit activation.
-  const preparation = engine.prepare('en', {
+  const preparation = engine.prepareForMode(sourceMode.value as SourceMode, {
     onProgress(percent) {
       setBusy(true, `Загрузка ${percent}%`);
       engineDetail.textContent = `Загружаю языковой пакет: ${percent}%`;
@@ -366,7 +384,7 @@ required<HTMLButtonElement>('[data-action="restore-page"]').addEventListener('cl
 });
 
 required<HTMLButtonElement>('[data-action="prepare-engine"]').addEventListener('click', () => {
-  const pending = engine.prepare('en', {
+  const pending = engine.prepareForMode(state.settings.sourceMode, {
     onProgress(percent) { engineDetail.textContent = `Загружаю языковой пакет: ${percent}%`; },
   });
   engineDetail.textContent = 'Подготавливаю локальный переводчик…';

@@ -103,4 +103,16 @@ describe('StorageRepository', () => {
     const state = (storage.data[STORAGE_KEY] as ExtensionState);
     expect(state.dictionary.map((entry) => entry.original).sort()).toEqual(['cat', 'dog']);
   });
+
+  it('accepts later writes after a mutation rejects', async () => {
+    const storage = new MemoryStorage();
+    const repository = new StorageRepository(storage);
+
+    await expect(repository.updateDictionaryEntry('missing', {
+      original: 'cat', translation: 'кот', note: '',
+    })).rejects.toThrow('Запись не найдена');
+    await repository.addDictionaryEntry({ original: 'dog', translation: 'собака', note: '' });
+
+    expect((await repository.loadState()).dictionary[0]?.original).toBe('dog');
+  });
 });

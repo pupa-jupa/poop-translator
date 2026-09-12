@@ -102,15 +102,15 @@ export class StorageRepository {
   }
 
   private async mutate<T>(operation: (state: ExtensionState) => T | Promise<T>): Promise<T> {
-    let output!: T;
-    const current = this.writeQueue;
-    this.writeQueue = current.then(async () => {
+    const result = this.writeQueue.then(async () => {
       const state = await this.loadState();
-      output = await operation(state);
+      const output = await operation(state);
       await this.area.set({ [STORAGE_KEY]: state });
+      return output;
     });
-    await this.writeQueue;
-    return output;
+    // A failed individual operation must not poison the queue tail.
+    this.writeQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   async updateSettings(patch: Partial<Settings>): Promise<Settings> {
