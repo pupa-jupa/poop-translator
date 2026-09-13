@@ -1,0 +1,37 @@
+name: Проверка расширения
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Получить код
+        uses: actions/checkout@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Запустить тесты
+        run: npm test
+
+      - name: Проверить типы
+        run: npm run typecheck
+
+      - name: Собрать расширение
+        run: npm run build
+
+      - name: Проверить комплектность сборки
+        run: npm run smoke

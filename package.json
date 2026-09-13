@@ -2,6 +2,15 @@
   "name": "poop-translator",
   "version": "1.1.0",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pupa-jupa/poop-translator.git"
+  },
+  "homepage": "https://github.com/pupa-jupa/poop-translator#readme",
+  "bugs": {
+    "url": "https://github.com/pupa-jupa/poop-translator/issues"
+  },
   "type": "module",
   "scripts": {
     "icons": "node scripts/generate-icons.mjs",

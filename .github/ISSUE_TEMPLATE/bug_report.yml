@@ -1,0 +1,41 @@
+name: Сообщить об ошибке
+description: Опишите проблему в работе poop translator
+title: "[Ошибка]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Что произошло?
+      description: Расскажите, что вы ожидали увидеть и что произошло вместо этого.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как повторить?
+      placeholder: |
+        1. Открыть страницу…
+        2. Выделить текст…
+        3. Нажать…
+    validations:
+      required: true
+  - type: input
+    id: chrome
+    attributes:
+      label: Версия Chrome
+      placeholder: Например, 140.0.7339.128
+    validations:
+      required: true
+  - type: input
+    id: extension
+    attributes:
+      label: Версия расширения
+      placeholder: Например, 1.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Дополнительные сведения
+      description: При необходимости добавьте текст ошибки или скриншот.

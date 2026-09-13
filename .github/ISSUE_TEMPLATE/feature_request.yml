@@ -1,0 +1,17 @@
+name: Предложить улучшение
+description: Расскажите об идее для poop translator
+title: "[Идея]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Что вы предлагаете?
+      description: Опишите желаемое поведение и задачу, которую оно решает.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Пример использования
+      description: Покажите, как это могло бы работать для пользователя.
