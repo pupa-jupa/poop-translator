@@ -1,11 +1,12 @@
 import contentStyles from './content.css?inline';
+import { lookupAlternativeVariants } from './core/dictionary-client';
 import { PageTranslationSession, findMainContent } from './core/page-translation';
 import { STORAGE_KEY } from './core/storage';
 import { getStorageClient } from './core/storage-client';
 import { ChromeTranslator } from './core/translator';
 import { translateFromUserActivation } from './core/user-activated-translation';
 import { createRequestId, isContentRequest, type PageStatus, type RuntimeResponse } from './shared/messages';
-import type { Settings, SourceMode, TranslationResult, TranslationSource } from './shared/types';
+import type { DictionaryVariant, Settings, SourceMode, TranslationResult, TranslationSource } from './shared/types';
 
 const engine = new ChromeTranslator();
 const repository = getStorageClient();
@@ -14,6 +15,7 @@ let host: HTMLDivElement | undefined;
 let layer: HTMLDivElement | undefined;
 let selectionButton: HTMLButtonElement | undefined;
 let card: HTMLDivElement | undefined;
+let cardPreviousFocus: HTMLElement | undefined;
 let pagePrompt: HTMLDivElement | undefined;
 let selectedText = '';
 let selectedRect: DOMRect | undefined;
@@ -62,6 +64,8 @@ function removeSelectionButton(): void {
 function closeCard(): void {
   card?.remove();
   card = undefined;
+  if (cardPreviousFocus?.isConnected) cardPreviousFocus.focus({ preventScroll: true });
+  cardPreviousFocus = undefined;
 }
 
 function showToast(message: string): void {
@@ -109,14 +113,18 @@ function cardShell(original: string, rect?: DOMRect): {
   element: HTMLDivElement;
   status: HTMLDivElement;
   translation: HTMLParagraphElement;
+  variants: HTMLElement;
+  variantsList: HTMLElement;
   actions: HTMLDivElement;
 } {
   closeCard();
   const point = pointForCard(rect);
+  const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
   const element = document.createElement('div');
   element.className = 'pt-card';
   element.setAttribute('role', 'dialog');
   element.setAttribute('aria-label', 'Перевод');
+  element.tabIndex = -1;
   element.style.setProperty('--pt-left', `${point.left}px`);
   element.style.setProperty('--pt-top', `${point.top}px`);
   element.innerHTML = `
@@ -131,18 +139,68 @@ function cardShell(original: string, rect?: DOMRect): {
     <p class="pt-label">Перевод</p>
     <div class="pt-status" role="status" aria-live="polite"><span class="pt-spinner"></span><span>Готовлю переводчик…</span></div>
     <p class="pt-copy pt-translation" hidden></p>
+    <section class="pt-variants" aria-label="Варианты перевода" hidden>
+      <div class="pt-variants__head"><span>Другие значения</span><small>локальный словарь</small></div>
+      <div class="pt-variants__list"></div>
+    </section>
     <div class="pt-actions"></div>`;
   element.querySelector<HTMLParagraphElement>('.pt-original')!.textContent = original;
   element.querySelector<HTMLButtonElement>('.pt-icon-button')!.addEventListener('click', closeCard);
   element.addEventListener('pointerdown', (event) => event.stopPropagation());
   ensureLayer().append(element);
   card = element;
+  cardPreviousFocus = previousFocus;
+  element.focus({ preventScroll: true });
   return {
     element,
     status: element.querySelector<HTMLDivElement>('.pt-status')!,
     translation: element.querySelector<HTMLParagraphElement>('.pt-translation')!,
+    variants: element.querySelector<HTMLElement>('.pt-variants')!,
+    variantsList: element.querySelector<HTMLElement>('.pt-variants__list')!,
     actions: element.querySelector<HTMLDivElement>('.pt-actions')!,
   };
+}
+
+type CardView = ReturnType<typeof cardShell>;
+
+function partOfSpeechLabel(value?: string): string {
+  return ({
+    n: 'сущ.', v: 'гл.', adj: 'прил.', adv: 'нареч.', pn: 'имя',
+    pronoun: 'мест.', preposition: 'предл.', conjunction: 'союз', interjection: 'межд.',
+    proverb: 'посл.', phraseologicalUnit: 'фраза',
+  } as Record<string, string>)[value ?? ''] ?? '';
+}
+
+function createVariantButton(result: TranslationResult, variant: DictionaryVariant): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.className = 'pt-variant';
+  button.type = 'button';
+  button.setAttribute('aria-label', `Добавить «${variant.translation}» в словарь`);
+  const meaning = document.createElement('span');
+  meaning.textContent = variant.translation;
+  const meta = document.createElement('small');
+  meta.textContent = `${partOfSpeechLabel(variant.partOfSpeech)} ＋`.trim();
+  button.append(meaning, meta);
+  button.addEventListener('click', () => {
+    button.disabled = true;
+    void repository.addDictionaryEntry({ original: result.original, translation: variant.translation })
+      .then(({ added }) => {
+        meta.textContent = added ? 'добавлено ✓' : 'уже есть ✓';
+        showToast(added ? 'Вариант добавлен в словарь' : 'Уже в словаре');
+      })
+      .catch(() => {
+        button.disabled = false;
+        showToast('Не удалось добавить вариант');
+      });
+  });
+  return button;
+}
+
+async function showAlternativeVariants(view: CardView, result: TranslationResult): Promise<void> {
+  const variants = await lookupAlternativeVariants(result.original, result.translation, result.sourceLanguage);
+  if (!view.element.isConnected || card !== view.element || !variants.length) return;
+  view.variantsList.append(...variants.map((variant) => createVariantButton(result, variant)));
+  view.variants.hidden = false;
 }
 
 async function saveSuccessfulTranslation(
@@ -156,7 +214,7 @@ async function saveSuccessfulTranslation(
     original: result.original,
     translation: result.translation,
     sourceLanguage: result.sourceLanguage,
-    targetLanguage: 'ru',
+    targetLanguage: result.targetLanguage,
     source,
   });
 }
@@ -167,6 +225,7 @@ async function showTranslationCard(
   source: TranslationSource,
   userActivated: boolean,
   requestId = createRequestId(),
+  sourceMode: SourceMode = settings.sourceMode,
 ): Promise<void> {
   const view = cardShell(text, rect);
 
@@ -175,7 +234,7 @@ async function showTranslationCard(
     view.status.innerHTML = '<span class="pt-spinner"></span><span>Готовлю переводчик…</span>';
     view.actions.replaceChildren();
     try {
-      const result = await translateFromUserActivation(engine, text, settings.sourceMode, {
+      const result = await translateFromUserActivation(engine, text, sourceMode, {
         onProgress(percent) {
           const label = view.status.querySelector('span:last-child');
           if (label) label.textContent = `Загружаю языковой пакет: ${percent}%`;
@@ -199,6 +258,7 @@ async function showTranslationCard(
         add.disabled = true;
       });
       if (!result.alreadyRussian) view.actions.append(copy, add);
+      void showAlternativeVariants(view, result);
       await saveSuccessfulTranslation(result, source, requestId);
     } catch (error) {
       if (!view.element.isConnected) return;
@@ -369,7 +429,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   try {
     switch (message.type) {
       case 'SHOW_SELECTION_TRANSLATOR':
-        void showTranslationCard(message.text, undefined, 'context-menu', false, message.requestId)
+        void showTranslationCard(message.text, undefined, 'context-menu', false, message.requestId, message.sourceMode)
           .then(() => respond({ ok: true, data: pageStatus }))
           .catch((error) => respond({ ok: false, error: String(error) }));
         return true;

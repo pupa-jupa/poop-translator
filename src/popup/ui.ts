@@ -34,11 +34,12 @@ export function mountPopupShell(root: HTMLElement): void {
             <label>Исходный язык
               <select data-control="source-mode">
                 <option value="en">Английский</option>
-                <option value="auto">Авто</option>
+                <option value="ru">Русский</option>
+                <option value="auto">Авто EN ↔ RU</option>
               </select>
             </label>
             <span class="language-arrow">→</span>
-            <div class="target-language"><small>Перевод</small><strong>Русский</strong></div>
+            <div class="target-language"><small>Перевод</small><strong data-target-language>Русский</strong></div>
           </div>
 
           <form class="translate-form" data-form="translate">
@@ -56,6 +57,10 @@ export function mountPopupShell(root: HTMLElement): void {
             <p class="result-original" data-result-original></p>
             <div class="result-divider"></div>
             <p class="result-translation" data-result-translation></p>
+            <section class="result-variants" data-result-variants aria-label="Варианты перевода" hidden>
+              <div class="result-variants__head"><span>Другие значения</span><small>локальный словарь</small></div>
+              <div class="result-variants__list" data-result-variants-list></div>
+            </section>
             <div class="result-actions">
               <button class="button button--soft" type="button" data-action="copy-result">Копировать</button>
               <button class="button button--accent" type="button" data-action="save-result">♡ В словарь</button>
@@ -88,8 +93,8 @@ export function mountPopupShell(root: HTMLElement): void {
         <section id="panel-settings" class="view" data-view="settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
           <div class="section-head"><div><span class="section-kicker">Под себя</span><h2>Настройки</h2></div></div>
           <div class="settings-group">
-            <label class="setting-row setting-row--stack"><span><strong>Исходный язык</strong><small>Основное направление — английский → русский</small></span>
-              <select data-control="settings-source-mode"><option value="en">Английский</option><option value="auto">Автоопределение</option></select>
+            <label class="setting-row setting-row--stack"><span><strong>Направление перевода</strong><small>Английский ↔ русский или автоматический выбор</small></span>
+              <select data-control="settings-source-mode"><option value="en">EN → RU</option><option value="ru">RU → EN</option><option value="auto">Авто EN ↔ RU</option></select>
             </label>
             <label class="setting-row"><span><strong>Сохранять историю</strong><small>Только ручные и выделенные переводы</small></span><input class="switch" type="checkbox" aria-label="Сохранять историю" data-control="save-history"></label>
             <label class="setting-row"><span><strong>Кнопка у выделения</strong><small>Показывать маленького помощника на страницах</small></span><input class="switch" type="checkbox" aria-label="Показывать кнопку возле выделения" data-control="selection-button"></label>

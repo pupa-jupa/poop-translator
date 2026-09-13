@@ -1,9 +1,10 @@
 import './popup.css';
+import { lookupAlternativeVariants } from '../core/dictionary-client';
 import { STORAGE_KEY } from '../core/storage';
 import { getStorageClient } from '../core/storage-client';
 import { ChromeTranslator } from '../core/translator';
 import { createRequestId, type PageStatus, type RuntimeResponse } from '../shared/messages';
-import type { DictionaryEntry, ExtensionState, HistoryEntry, SourceMode, TranslationResult } from '../shared/types';
+import type { DictionaryEntry, DictionaryVariant, ExtensionState, HistoryEntry, SourceMode, TranslationResult } from '../shared/types';
 import { activateTab, mountPopupShell, type PopupTab } from './ui';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
@@ -20,6 +21,9 @@ const engine = new ChromeTranslator();
 let state: ExtensionState;
 let latestResult: TranslationResult | undefined;
 let toastTimer = 0;
+let translationBusy = false;
+let translationOperation = 0;
+let engineStatusOperation = 0;
 
 const sourceText = required<HTMLTextAreaElement>('#source-text');
 const charCount = required<HTMLElement>('[data-char-count]');
@@ -27,12 +31,15 @@ const translateForm = required<HTMLFormElement>('[data-form="translate"]');
 const translateButton = translateForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 const sourceMode = required<HTMLSelectElement>('[data-control="source-mode"]');
 const settingsSourceMode = required<HTMLSelectElement>('[data-control="settings-source-mode"]');
+const targetLanguageLabel = required<HTMLElement>('[data-target-language]');
 const saveHistory = required<HTMLInputElement>('[data-control="save-history"]');
 const selectionButtonSetting = required<HTMLInputElement>('[data-control="selection-button"]');
 const resultCard = required<HTMLElement>('[data-result]');
 const resultOriginal = required<HTMLElement>('[data-result-original]');
 const resultTranslation = required<HTMLElement>('[data-result-translation]');
 const resultLanguage = required<HTMLElement>('[data-result-language]');
+const resultVariants = required<HTMLElement>('[data-result-variants]');
+const resultVariantsList = required<HTMLElement>('[data-result-variants-list]');
 const translateError = required<HTMLElement>('[data-translate-error]');
 const enginePill = required<HTMLElement>('[data-engine-status]');
 const engineDetail = required<HTMLElement>('[data-engine-detail]');
@@ -70,6 +77,11 @@ function syncSettingsControls(): void {
   settingsSourceMode.value = state.settings.sourceMode;
   saveHistory.checked = state.settings.saveHistory;
   selectionButtonSetting.checked = state.settings.showSelectionButton;
+  targetLanguageLabel.textContent = state.settings.sourceMode === 'ru'
+    ? 'Английский'
+    : state.settings.sourceMode === 'auto'
+      ? 'EN ↔ RU'
+      : 'Русский';
 }
 
 function sourceLabel(entry: HistoryEntry): string {
@@ -198,23 +210,82 @@ async function updateSourceMode(mode: SourceMode): Promise<void> {
   await refreshState();
 }
 
+function partOfSpeechLabel(value?: string): string {
+  return ({
+    n: 'сущ.', v: 'гл.', adj: 'прил.', adv: 'нареч.', pn: 'имя',
+    pronoun: 'мест.', preposition: 'предл.', conjunction: 'союз', interjection: 'межд.',
+    proverb: 'посл.', phraseologicalUnit: 'фраза',
+  } as Record<string, string>)[value ?? ''] ?? '';
+}
+
+function createVariantButton(result: TranslationResult, variant: DictionaryVariant): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.className = 'result-variant';
+  button.type = 'button';
+  button.setAttribute('aria-label', `Добавить «${variant.translation}» в словарь`);
+  const meaning = document.createElement('span');
+  meaning.className = 'result-variant__meaning';
+  meaning.textContent = variant.translation;
+  const meta = document.createElement('span');
+  meta.className = 'result-variant__meta';
+  meta.textContent = `${partOfSpeechLabel(variant.partOfSpeech)} ＋`.trim();
+  button.append(meaning, meta);
+  button.addEventListener('click', () => {
+    button.disabled = true;
+    void repository.addDictionaryEntry({ original: result.original, translation: variant.translation })
+      .then(async ({ added }) => {
+        await refreshState();
+        meta.textContent = added ? 'добавлено ✓' : 'уже есть ✓';
+        showToast(added ? 'Вариант добавлен в словарь' : 'Уже в словаре');
+      })
+      .catch(() => {
+        button.disabled = false;
+        showToast('Не удалось добавить вариант');
+      });
+  });
+  return button;
+}
+
+async function renderAlternativeVariants(result: TranslationResult): Promise<void> {
+  resultVariants.hidden = true;
+  resultVariantsList.replaceChildren();
+  if (result.alreadyRussian) return;
+  const variants = await lookupAlternativeVariants(result.original, result.translation, result.sourceLanguage);
+  if (latestResult !== result || !variants.length) return;
+  resultVariantsList.append(...variants.map((variant) => createVariantButton(result, variant)));
+  resultVariants.hidden = false;
+}
+
 function renderTranslationResult(result: TranslationResult): void {
   latestResult = result;
   resultOriginal.textContent = result.original;
   resultTranslation.textContent = result.alreadyRussian ? 'Текст уже на русском' : result.translation;
-  resultLanguage.textContent = `${result.sourceLanguage.toUpperCase()} → RU`;
+  resultLanguage.textContent = `${result.sourceLanguage.toUpperCase()} → ${result.targetLanguage.toUpperCase()}`;
   resultCard.hidden = false;
   required<HTMLButtonElement>('[data-action="save-result"]').disabled = result.alreadyRussian;
+  void renderAlternativeVariants(result);
 }
 
 async function updateEngineStatus(): Promise<void> {
-  const availability = await engine.getAvailability('en');
+  const mode = sourceMode.value as SourceMode;
+  const operation = ++engineStatusOperation;
+  const availabilityValues = mode === 'auto'
+    ? await Promise.all([engine.getAvailability('en'), engine.getAvailability('ru')])
+    : [await engine.getAvailability(mode)];
+  const availability = availabilityValues.includes('unavailable')
+    ? 'unavailable'
+    : availabilityValues.includes('downloadable')
+      ? 'downloadable'
+      : availabilityValues.includes('downloading')
+        ? 'downloading'
+        : 'available';
+  if (operation !== engineStatusOperation || sourceMode.value !== mode) return;
   enginePill.dataset.state = availability;
   const compact = {
     available: 'Готов', downloadable: 'Нужна загрузка', downloading: 'Загрузка', unavailable: 'Недоступен',
   }[availability];
   const detail = {
-    available: 'Языковой пакет готов. Перевод выполняется на устройстве.',
+    available: mode === 'auto' ? 'Обе языковые пары готовы на устройстве.' : 'Языковой пакет готов. Перевод выполняется на устройстве.',
     downloadable: 'Нажмите «Подготовить», чтобы бесплатно скачать языковой пакет.',
     downloading: 'Chrome загружает языковой пакет.',
     unavailable: 'Нужен настольный Google Chrome 138 или новее.',
@@ -302,6 +373,7 @@ sourceText.addEventListener('keydown', (event) => {
 
 translateForm.addEventListener('submit', (event) => {
   event.preventDefault();
+  if (translationBusy) return;
   const text = sourceText.value.trim();
   if (!text) {
     translateError.textContent = 'Напишите текст, который нужно перевести.';
@@ -309,9 +381,13 @@ translateForm.addEventListener('submit', (event) => {
     sourceText.focus();
     return;
   }
+  const submittedMode = sourceMode.value as SourceMode;
+  const operation = ++translationOperation;
+  translationBusy = true;
   // Start creation synchronously inside submit activation.
-  const preparation = engine.prepareForMode(sourceMode.value as SourceMode, {
+  const preparation = engine.prepareForMode(submittedMode, {
     onProgress(percent) {
+      if (operation !== translationOperation) return;
       setBusy(true, `Загрузка ${percent}%`);
       engineDetail.textContent = `Загружаю языковой пакет: ${percent}%`;
     },
@@ -322,7 +398,8 @@ translateForm.addEventListener('submit', (event) => {
     setBusy(true);
     try {
       await preparation;
-      const result = await engine.translate(text, sourceMode.value as SourceMode);
+      const result = await engine.translate(text, submittedMode);
+      if (operation !== translationOperation) return;
       renderTranslationResult(result);
       if (!result.alreadyRussian) {
         await repository.addHistory({
@@ -330,23 +407,27 @@ translateForm.addEventListener('submit', (event) => {
           original: result.original,
           translation: result.translation,
           sourceLanguage: result.sourceLanguage,
-          targetLanguage: 'ru',
+          targetLanguage: result.targetLanguage,
           source: 'manual',
         });
         await refreshState();
       }
       await updateEngineStatus();
     } catch (error) {
+      if (operation !== translationOperation) return;
       translateError.textContent = error instanceof Error ? error.message : 'Не удалось выполнить перевод.';
       translateError.hidden = false;
     } finally {
-      setBusy(false);
+      if (operation === translationOperation) {
+        translationBusy = false;
+        setBusy(false);
+      }
     }
   })();
 });
 
-sourceMode.addEventListener('change', () => void updateSourceMode(sourceMode.value as SourceMode));
-settingsSourceMode.addEventListener('change', () => void updateSourceMode(settingsSourceMode.value as SourceMode));
+sourceMode.addEventListener('change', () => void updateSourceMode(sourceMode.value as SourceMode).then(updateEngineStatus));
+settingsSourceMode.addEventListener('change', () => void updateSourceMode(settingsSourceMode.value as SourceMode).then(updateEngineStatus));
 saveHistory.addEventListener('change', () => void repository.updateSettings({ saveHistory: saveHistory.checked }).then(refreshState));
 selectionButtonSetting.addEventListener('change', () => void repository.updateSettings({ showSelectionButton: selectionButtonSetting.checked }).then(refreshState));
 historySearch.addEventListener('input', renderHistory);

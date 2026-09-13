@@ -1,4 +1,4 @@
-export type SourceMode = 'en' | 'auto';
+export type SourceMode = 'en' | 'ru' | 'auto';
 export type TranslationSource = 'manual' | 'selection' | 'context-menu';
 
 export interface Settings {
@@ -13,7 +13,7 @@ export interface HistoryEntry {
   original: string;
   translation: string;
   sourceLanguage: string;
-  targetLanguage: 'ru';
+  targetLanguage: 'ru' | 'en';
   source: TranslationSource;
   createdAt: number;
 }
@@ -51,8 +51,13 @@ export interface TranslationResult {
   original: string;
   translation: string;
   sourceLanguage: string;
-  targetLanguage: 'ru';
+  targetLanguage: 'ru' | 'en';
   alreadyRussian: boolean;
+}
+
+export interface DictionaryVariant {
+  translation: string;
+  partOfSpeech?: string;
 }
 
 export type EngineAvailability = 'available' | 'downloadable' | 'downloading' | 'unavailable';

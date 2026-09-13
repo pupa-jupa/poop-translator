@@ -1,3 +1,4 @@
 node_modules/
 .tmp-chrome-profile*/
+.tmp-dictionary/
 npm-debug.log*

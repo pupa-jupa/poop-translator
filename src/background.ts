@@ -1,16 +1,25 @@
+import { LocalDictionary } from './core/dictionary';
 import { getStorageRepository } from './core/storage';
 import { isStorageMutationMessage } from './core/storage-client';
-import { createRequestId } from './shared/messages';
+import { createRequestId, isDictionaryLookupRequest } from './shared/messages';
 import type { DictionaryInput, HistoryInput, Settings } from './shared/types';
 
-const MENU_ID = 'poop-translator-selection';
+const MENU_RU_ID = 'poop-translator-selection-ru';
+const MENU_EN_ID = 'poop-translator-selection-en';
 const repository = getStorageRepository();
+const dictionary = new LocalDictionary();
 
 async function createContextMenu(): Promise<void> {
   await chrome.contextMenus.removeAll();
   chrome.contextMenus.create({
-    id: MENU_ID,
+    id: MENU_RU_ID,
     title: 'poop translator — перевести на русский',
+    contexts: ['selection'],
+    documentUrlPatterns: ['http://*/*', 'https://*/*'],
+  });
+  chrome.contextMenus.create({
+    id: MENU_EN_ID,
+    title: 'poop translator — перевести на английский',
     contexts: ['selection'],
     documentUrlPatterns: ['http://*/*', 'https://*/*'],
   });
@@ -26,16 +35,23 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId !== MENU_ID || !tab?.id || !info.selectionText?.trim()) return;
+  if ((info.menuItemId !== MENU_RU_ID && info.menuItemId !== MENU_EN_ID) || !tab?.id || !info.selectionText?.trim()) return;
   void chrome.tabs.sendMessage(tab.id, {
     type: 'SHOW_SELECTION_TRANSLATOR',
     requestId: createRequestId(),
     text: info.selectionText.trim(),
     source: 'context-menu',
+    sourceMode: info.menuItemId === MENU_EN_ID ? 'ru' : 'en',
   }).catch(() => undefined);
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (isDictionaryLookupRequest(message)) {
+    void dictionary.lookup(message.text, message.sourceLanguage)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+    return true;
+  }
   if (!isStorageMutationMessage(message)) return false;
   const execute = async (): Promise<unknown> => {
     switch (message.operation) {

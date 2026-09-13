@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Собрать готовое к загрузке расширение Chrome для локального перевода английского текста на русский.
+**Goal:** Собрать готовое к загрузке расширение Chrome для локального перевода между английским и русским с несколькими словарными значениями.
 
 **Architecture:** Manifest V3 разделяет popup, content script и service worker. Переводчик работает в документном контексте, данные проходят через типизированные модули и сохраняются в `chrome.storage.local`.
 
@@ -14,6 +14,7 @@
 
 - Интерфейс полностью на русском языке.
 - Основной движок бесплатный Chrome Translator API без API-ключей.
+- Направления: EN→RU, RU→EN и авто EN↔RU; варианты слов работают из локальных данных FreeDict.
 - Постоянные пользовательские данные хранятся только в `chrome.storage.local`.
 - Manifest V3, локальные скрипты и иконки, без `eval` и удалённого исполняемого кода.
 - Переводы страниц не попадают в историю.

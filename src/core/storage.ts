@@ -33,7 +33,7 @@ function nonEmptyString(value: unknown): value is string {
 function normalizedSettings(value: unknown): Settings {
   if (!isRecord(value)) return { ...DEFAULT_STATE.settings };
   return {
-    sourceMode: value.sourceMode === 'auto' ? 'auto' : 'en',
+    sourceMode: value.sourceMode === 'auto' || value.sourceMode === 'ru' ? value.sourceMode : 'en',
     saveHistory: typeof value.saveHistory === 'boolean'
       ? value.saveHistory
       : DEFAULT_STATE.settings.saveHistory,
@@ -52,7 +52,7 @@ function normalizedHistory(value: unknown): HistoryEntry[] {
       && nonEmptyString(entry.original)
       && nonEmptyString(entry.translation)
       && nonEmptyString(entry.sourceLanguage)
-      && entry.targetLanguage === 'ru'
+      && (entry.targetLanguage === 'ru' || entry.targetLanguage === 'en')
       && ['manual', 'selection', 'context-menu'].includes(String(entry.source))
       && typeof entry.createdAt === 'number';
   }).slice(0, HISTORY_LIMIT);

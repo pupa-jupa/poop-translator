@@ -10,10 +10,17 @@ export interface PageStatus {
 }
 
 export type ContentRequest =
-  | { type: 'SHOW_SELECTION_TRANSLATOR'; requestId: string; text: string; source: Extract<TranslationSource, 'context-menu'> }
+  | { type: 'SHOW_SELECTION_TRANSLATOR'; requestId: string; text: string; source: Extract<TranslationSource, 'context-menu'>; sourceMode: Exclude<SourceMode, 'auto'> }
   | { type: 'TRANSLATE_PAGE'; requestId: string; sourceMode: SourceMode }
   | { type: 'RESTORE_PAGE'; requestId: string }
   | { type: 'GET_PAGE_STATUS'; requestId: string };
+
+export interface DictionaryLookupRequest {
+  type: 'LOOKUP_DICTIONARY';
+  requestId: string;
+  text: string;
+  sourceLanguage: 'en' | 'ru';
+}
 
 export interface RuntimeResponse<T = unknown> {
   ok: boolean;
@@ -33,15 +40,28 @@ export function isContentRequest(value: unknown): value is ContentRequest {
   if (!isRecord(value) || !hasRequestId(value) || typeof value.type !== 'string') return false;
   switch (value.type) {
     case 'SHOW_SELECTION_TRANSLATOR':
-      return typeof value.text === 'string' && value.text.trim().length > 0 && value.source === 'context-menu';
+      return typeof value.text === 'string'
+        && value.text.trim().length > 0
+        && value.source === 'context-menu'
+        && (value.sourceMode === 'en' || value.sourceMode === 'ru');
     case 'TRANSLATE_PAGE':
-      return value.sourceMode === 'en' || value.sourceMode === 'auto';
+      return value.sourceMode === 'en' || value.sourceMode === 'ru' || value.sourceMode === 'auto';
     case 'RESTORE_PAGE':
     case 'GET_PAGE_STATUS':
       return true;
     default:
       return false;
   }
+}
+
+export function isDictionaryLookupRequest(value: unknown): value is DictionaryLookupRequest {
+  return isRecord(value)
+    && hasRequestId(value)
+    && value.type === 'LOOKUP_DICTIONARY'
+    && typeof value.text === 'string'
+    && value.text.trim().length > 0
+    && value.text.length <= 120
+    && (value.sourceLanguage === 'en' || value.sourceLanguage === 'ru');
 }
 
 export function createRequestId(): string {

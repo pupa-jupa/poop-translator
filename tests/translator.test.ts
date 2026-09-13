@@ -75,20 +75,37 @@ describe('ChromeTranslator', () => {
     const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
 
     const preparation = engine.prepareForMode('auto');
-    expect(translatorApi.create).toHaveBeenCalledOnce();
+    expect(translatorApi.create).toHaveBeenCalledTimes(2);
     expect(detectorApi.create).toHaveBeenCalledOnce();
     await preparation;
   });
 
-  it('starts both downloadable auto-mode components during the selection click', async () => {
-    let releaseTranslator: (() => void) | undefined;
+  it('translates Russian to English with the reverse language pair', async () => {
+    const api = fakeTranslatorApi({ translated: 'Good afternoon' });
+    const engine = new ChromeTranslator({ Translator: api });
+
+    const result = await engine.translate('Добрый день', 'ru');
+
+    expect(result).toMatchObject({
+      translation: 'Good afternoon',
+      sourceLanguage: 'ru',
+      targetLanguage: 'en',
+    });
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
+      sourceLanguage: 'ru',
+      targetLanguage: 'en',
+    }));
+  });
+
+  it('starts both translation directions and detection during the selection click', async () => {
+    const releaseTranslators: Array<() => void> = [];
     let releaseDetector: (() => void) | undefined;
     const translated = vi.fn(async () => 'Длинное английское предложение');
     const detected = vi.fn(async () => [{ detectedLanguage: 'en', confidence: 0.99 }]);
     const translatorApi = {
       availability: vi.fn(async () => 'downloadable'),
       create: vi.fn(() => new Promise<{ translate: typeof translated; destroy: () => void }>((resolve) => {
-        releaseTranslator = () => resolve({ translate: translated, destroy: () => undefined });
+        releaseTranslators.push(() => resolve({ translate: translated, destroy: () => undefined }));
       })),
     };
     const detectorApi = {
@@ -105,10 +122,10 @@ describe('ChromeTranslator', () => {
       'auto',
     );
 
-    expect(translatorApi.create).toHaveBeenCalledOnce();
+    expect(translatorApi.create).toHaveBeenCalledTimes(2);
     expect(detectorApi.create).toHaveBeenCalledOnce();
     expect(detected).not.toHaveBeenCalled();
-    releaseTranslator?.();
+    releaseTranslators.forEach((release) => release());
     releaseDetector?.();
 
     await expect(pending).resolves.toMatchObject({
@@ -117,8 +134,8 @@ describe('ChromeTranslator', () => {
     });
   });
 
-  it('returns Russian text unchanged when auto detection is confident', async () => {
-    const translatorApi = fakeTranslatorApi();
+  it('translates confidently detected Russian text to English in auto mode', async () => {
+    const translatorApi = fakeTranslatorApi({ translated: 'Good afternoon' });
     const detectorApi = {
       availability: vi.fn(async () => 'available'),
       create: vi.fn(async () => ({
@@ -131,11 +148,15 @@ describe('ChromeTranslator', () => {
     const result = await engine.translate('Добрый день', 'auto');
 
     expect(result).toMatchObject({
-      translation: 'Добрый день',
+      translation: 'Good afternoon',
       sourceLanguage: 'ru',
-      alreadyRussian: true,
+      targetLanguage: 'en',
+      alreadyRussian: false,
     });
-    expect(translatorApi.create).not.toHaveBeenCalled();
+    expect(translatorApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      sourceLanguage: 'ru',
+      targetLanguage: 'en',
+    }));
   });
 
   it('falls back to English for a short word instead of unreliable detection', async () => {
@@ -146,6 +167,17 @@ describe('ChromeTranslator', () => {
     const result = await engine.translate('cat', 'auto');
 
     expect(result.sourceLanguage).toBe('en');
+    expect(detectorApi.create).not.toHaveBeenCalled();
+  });
+
+  it('recognizes a short Russian word by its script without language detector', async () => {
+    const translatorApi = fakeTranslatorApi({ translated: 'cat' });
+    const detectorApi = { availability: vi.fn(), create: vi.fn() };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
+
+    const result = await engine.translate('кот', 'auto');
+
+    expect(result).toMatchObject({ translation: 'cat', sourceLanguage: 'ru', targetLanguage: 'en' });
     expect(detectorApi.create).not.toHaveBeenCalled();
   });
 

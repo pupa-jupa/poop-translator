@@ -1,0 +1,21 @@
+English-Русский FreeDict+WikDict dictionary, version 2025.11.23
+Русский-English FreeDict+WikDict dictionary, version 2025.11.23
+
+Publisher and maintainer: Karl Bartel
+The bilingual dictionaries were automatically created by WikDict:
+http://www.wikdict.com/
+Base data comes from Wiktionary via DBnary:
+https://www.wiktionary.org/
+http://kaiko.getalp.org/about-dbnary/
+
+Sources:
+https://download.freedict.org/generated/eng-rus/eng-rus.tei
+https://download.freedict.org/generated/rus-eng/rus-eng.tei
+
+Project: https://freedict.org/
+License: Creative Commons Attribution-ShareAlike 3.0 Unported
+License text: https://creativecommons.org/licenses/by-sa/3.0/legalcode
+
+The data was transformed into compact JSON files split by translation direction
+and first letter. U+0301 stress marks and source markup were removed for display.
+The transformed data is distributed under the same CC BY-SA 3.0 terms.
