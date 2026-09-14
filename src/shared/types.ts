@@ -1,10 +1,12 @@
 export type SourceMode = 'en' | 'ru' | 'auto';
+export type TextScale = 100 | 115 | 130;
 export type TranslationSource = 'manual' | 'selection' | 'context-menu';
 
 export interface Settings {
   sourceMode: SourceMode;
   saveHistory: boolean;
   showSelectionButton: boolean;
+  textScale: TextScale;
 }
 
 export interface HistoryEntry {
@@ -40,6 +42,18 @@ export interface ExtensionState {
   settings: Settings;
   history: HistoryEntry[];
   dictionary: DictionaryEntry[];
+}
+
+export interface ExtensionBackup {
+  format: 'poop-translator-backup';
+  version: 1;
+  exportedAt: string;
+  data: ExtensionState;
+}
+
+export interface BackupImportResult {
+  historyAdded: number;
+  dictionaryAdded: number;
 }
 
 export interface StorageAreaLike {

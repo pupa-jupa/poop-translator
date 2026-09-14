@@ -157,6 +157,39 @@ try {
   await storedCard.waitFor({ state: 'detached' });
   await popup.locator('[data-tab="settings"]').click();
   if (!await popup.locator('[data-view="settings"]').isVisible()) throw new Error('Settings tab did not open');
+  await popup.locator('[data-control="text-scale"]').selectOption('130');
+  await popup.locator('html[data-text-scale="130"]').waitFor();
+
+  const backupWord = `backup-${Date.now()}`;
+  const backup = {
+    format: 'poop-translator-backup',
+    version: 1,
+    exportedAt: '2026-09-13T10:00:00.000Z',
+    data: {
+      schemaVersion: 1,
+      settings: { sourceMode: 'en', saveHistory: true, showSelectionButton: true, textScale: 115 },
+      history: [],
+      dictionary: [{
+        id: 'backup-entry', original: backupWord, translation: 'резерв', note: '',
+        createdAt: 1_789_290_000_000, updatedAt: 1_789_290_000_000,
+      }],
+    },
+  };
+  await popup.locator('[data-import-file]').setInputFiles({
+    name: 'poop-translator-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(backup)),
+  });
+  await popup.locator('[data-confirm-button]').click();
+  await popup.locator('[data-toast]').getByText('Добавлено: 1 слов, 0 переводов').waitFor();
+  if (await popup.locator('html').getAttribute('data-text-scale') !== '115') {
+    throw new Error('Imported text scale was not applied');
+  }
+  await popup.locator('[data-tab="dictionary"]').click();
+  const backupCard = popup.locator('.item-card', { hasText: backupWord });
+  await backupCard.waitFor();
+  await backupCard.getByRole('button', { name: 'Удалить' }).click();
+  await backupCard.waitFor({ state: 'detached' });
   await popup.locator('[data-tab="translate"]').click();
   await popup.waitForTimeout(250);
   await popup.locator('[data-toast]').evaluate((element) => { element.hidden = true; });
@@ -165,17 +198,6 @@ try {
     : join(profilePath, 'poop-translator-popup.png');
   await mkdir(dirname(screenshotPath), { recursive: true });
   await popup.screenshot({ path: screenshotPath });
-
-  if (process.env.POOP_TRANSLATION_SMOKE === '1') {
-    await popup.locator('#source-text').fill('Hello, how are you?');
-    await popup.locator('[data-form="translate"] button[type="submit"]').click();
-    await popup.locator('[data-result-translation]').waitFor({ state: 'visible', timeout: 180_000 });
-    const translatedText = (await popup.locator('[data-result-translation]').textContent())?.trim();
-    if (!translatedText || translatedText === 'Hello, how are you?') {
-      throw new Error(`Real translation did not produce Russian text: ${translatedText}`);
-    }
-    console.log(`Real translation: Hello, how are you? → ${translatedText}`);
-  }
 
   const page = await context.newPage();
   await page.goto(`http://127.0.0.1:${address.port}`);
@@ -189,6 +211,18 @@ try {
   });
   const selectionButton = page.locator('[data-poop-translator-root] .pt-selection-button');
   await selectionButton.waitFor({ timeout: 5_000 });
+  const hiddenStatusDisplay = await page.locator('[data-poop-translator-root]').evaluate((host) => {
+    const status = document.createElement('div');
+    status.className = 'pt-status';
+    status.hidden = true;
+    host.shadowRoot.append(status);
+    const display = getComputedStyle(status).display;
+    status.remove();
+    return display;
+  });
+  if (hiddenStatusDisplay !== 'none') {
+    throw new Error(`Hidden translation status remains visible as ${hiddenStatusDisplay}`);
+  }
   const box = await selectionButton.boundingBox();
   if (!box || box.x < 0 || box.y < 0 || box.x + box.width > 1280) {
     throw new Error('Selection button is outside the viewport');

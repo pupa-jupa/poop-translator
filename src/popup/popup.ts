@@ -1,10 +1,11 @@
 import './popup.css';
 import { lookupAlternativeVariants } from '../core/dictionary-client';
-import { STORAGE_KEY } from '../core/storage';
+import { createBackup, STORAGE_KEY } from '../core/storage';
 import { getStorageClient } from '../core/storage-client';
+import { persistTranslationHistory } from '../core/translation-history';
 import { ChromeTranslator } from '../core/translator';
 import { createRequestId, type PageStatus, type RuntimeResponse } from '../shared/messages';
-import type { DictionaryEntry, DictionaryVariant, ExtensionState, HistoryEntry, SourceMode, TranslationResult } from '../shared/types';
+import type { DictionaryEntry, DictionaryVariant, ExtensionState, HistoryEntry, SourceMode, TextScale, TranslationResult } from '../shared/types';
 import { activateTab, mountPopupShell, type PopupTab } from './ui';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
@@ -34,6 +35,8 @@ const settingsSourceMode = required<HTMLSelectElement>('[data-control="settings-
 const targetLanguageLabel = required<HTMLElement>('[data-target-language]');
 const saveHistory = required<HTMLInputElement>('[data-control="save-history"]');
 const selectionButtonSetting = required<HTMLInputElement>('[data-control="selection-button"]');
+const textScale = required<HTMLSelectElement>('[data-control="text-scale"]');
+const importFile = required<HTMLInputElement>('[data-import-file]');
 const resultCard = required<HTMLElement>('[data-result]');
 const resultOriginal = required<HTMLElement>('[data-result-original]');
 const resultTranslation = required<HTMLElement>('[data-result-translation]');
@@ -77,6 +80,8 @@ function syncSettingsControls(): void {
   settingsSourceMode.value = state.settings.sourceMode;
   saveHistory.checked = state.settings.saveHistory;
   selectionButtonSetting.checked = state.settings.showSelectionButton;
+  textScale.value = String(state.settings.textScale);
+  document.documentElement.dataset.textScale = String(state.settings.textScale);
   targetLanguageLabel.textContent = state.settings.sourceMode === 'ru'
     ? 'Английский'
     : state.settings.sourceMode === 'auto'
@@ -402,15 +407,19 @@ translateForm.addEventListener('submit', (event) => {
       if (operation !== translationOperation) return;
       renderTranslationResult(result);
       if (!result.alreadyRussian) {
-        await repository.addHistory({
+        const historyResult = await persistTranslationHistory(() => repository.addHistory({
           requestId: createRequestId(),
           original: result.original,
           translation: result.translation,
           sourceLanguage: result.sourceLanguage,
           targetLanguage: result.targetLanguage,
           source: 'manual',
-        });
-        await refreshState();
+        }));
+        if (historyResult.status === 'failed') {
+          showToast('Перевод готов, историю сохранить не удалось');
+        } else if (historyResult.status === 'saved') {
+          await refreshState().catch(() => showToast('Перевод готов, историю обновить не удалось'));
+        }
       }
       await updateEngineStatus();
     } catch (error) {
@@ -426,16 +435,39 @@ translateForm.addEventListener('submit', (event) => {
   })();
 });
 
-sourceMode.addEventListener('change', () => void updateSourceMode(sourceMode.value as SourceMode).then(updateEngineStatus));
-settingsSourceMode.addEventListener('change', () => void updateSourceMode(settingsSourceMode.value as SourceMode).then(updateEngineStatus));
-saveHistory.addEventListener('change', () => void repository.updateSettings({ saveHistory: saveHistory.checked }).then(refreshState));
-selectionButtonSetting.addEventListener('change', () => void repository.updateSettings({ showSelectionButton: selectionButtonSetting.checked }).then(refreshState));
+sourceMode.addEventListener('change', () => void updateSourceMode(sourceMode.value as SourceMode)
+  .then(updateEngineStatus)
+  .catch(() => showToast('Не удалось сохранить направление')));
+settingsSourceMode.addEventListener('change', () => void updateSourceMode(settingsSourceMode.value as SourceMode)
+  .then(updateEngineStatus)
+  .catch(() => showToast('Не удалось сохранить направление')));
+saveHistory.addEventListener('change', () => void repository.updateSettings({ saveHistory: saveHistory.checked })
+  .then(refreshState)
+  .catch(() => {
+    showToast('Не удалось сохранить настройку');
+    void refreshState().catch(() => undefined);
+  }));
+selectionButtonSetting.addEventListener('change', () => void repository.updateSettings({ showSelectionButton: selectionButtonSetting.checked })
+  .then(refreshState)
+  .catch(() => {
+    showToast('Не удалось сохранить настройку');
+    void refreshState().catch(() => undefined);
+  }));
+textScale.addEventListener('change', () => {
+  const value = Number(textScale.value) as TextScale;
+  document.documentElement.dataset.textScale = textScale.value;
+  void repository.updateSettings({ textScale: value })
+    .then(refreshState)
+    .catch(() => showToast('Не удалось сохранить размер текста'));
+});
 historySearch.addEventListener('input', renderHistory);
 dictionarySearch.addEventListener('input', renderDictionary);
 
 required<HTMLButtonElement>('[data-action="copy-result"]').addEventListener('click', () => {
   if (!latestResult) return;
-  void navigator.clipboard.writeText(latestResult.translation).then(() => showToast('Перевод скопирован'));
+  void navigator.clipboard.writeText(latestResult.translation)
+    .then(() => showToast('Перевод скопирован'))
+    .catch(() => showToast('Не удалось скопировать перевод'));
 });
 
 required<HTMLButtonElement>('[data-action="save-result"]').addEventListener('click', () => {
@@ -443,8 +475,49 @@ required<HTMLButtonElement>('[data-action="save-result"]').addEventListener('cli
   void repository.addDictionaryEntry(latestResult).then(async (result) => {
     await refreshState();
     showToast(result.added ? 'Добавлено в словарь' : 'Уже в словаре');
-  });
+  }).catch(() => showToast('Не удалось добавить перевод в словарь'));
 });
+
+required<HTMLButtonElement>('[data-action="export-data"]').addEventListener('click', () => {
+  try {
+    const backup = createBackup(state);
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `poop-translator-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    showToast('Резервная копия сохранена');
+  } catch {
+    showToast('Не удалось создать резервную копию');
+  }
+});
+
+required<HTMLButtonElement>('[data-action="import-data"]').addEventListener('click', () => importFile.click());
+importFile.addEventListener('change', () => void (async () => {
+  const file = importFile.files?.[0];
+  importFile.value = '';
+  if (!file) return;
+  if (file.size > 10_000_000) {
+    showToast('Файл слишком большой');
+    return;
+  }
+  try {
+    const backup = JSON.parse(await file.text()) as unknown;
+    const confirmed = await confirmAction(
+      'Импортировать данные?',
+      'История и словарь объединятся с текущими, настройки будут взяты из файла.',
+      'Импортировать',
+    );
+    if (!confirmed) return;
+    const result = await repository.importBackup(backup);
+    await refreshState();
+    showToast(`Добавлено: ${result.dictionaryAdded} слов, ${result.historyAdded} переводов`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Не удалось прочитать резервную копию');
+  }
+})());
 
 required<HTMLButtonElement>('[data-action="translate-page"]').addEventListener('click', () => {
   void sendToActiveTab<PageStatus>({

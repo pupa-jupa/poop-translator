@@ -75,6 +75,8 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
         return repository.clearDictionary();
       case 'clearUserData':
         return repository.clearUserData();
+      case 'importBackup':
+        return repository.importBackup(message.payload);
     }
   };
   void execute()

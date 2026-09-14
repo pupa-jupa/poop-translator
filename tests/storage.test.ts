@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_STATE, STORAGE_KEY, StorageRepository } from '../src/core/storage';
+import { createBackup, DEFAULT_STATE, STORAGE_KEY, StorageRepository } from '../src/core/storage';
 import type { ExtensionState, StorageAreaLike } from '../src/shared/types';
 
 class MemoryStorage implements StorageAreaLike {
@@ -114,5 +114,54 @@ describe('StorageRepository', () => {
     await repository.addDictionaryEntry({ original: 'dog', translation: 'собака', note: '' });
 
     expect((await repository.loadState()).dictionary[0]?.original).toBe('dog');
+  });
+
+  it('normalizes the text scale to one of the supported values', async () => {
+    const storage = new MemoryStorage();
+    storage.data[STORAGE_KEY] = {
+      ...DEFAULT_STATE,
+      settings: { ...DEFAULT_STATE.settings, textScale: 130 },
+    };
+
+    expect((await new StorageRepository(storage).loadState()).settings.textScale).toBe(130);
+
+    (storage.data[STORAGE_KEY] as ExtensionState).settings.textScale = 999 as 130;
+    expect((await new StorageRepository(storage).loadState()).settings.textScale).toBe(115);
+  });
+
+  it('imports a versioned backup by merging unique history and dictionary entries', async () => {
+    const storage = new MemoryStorage();
+    const repository = new StorageRepository(storage);
+    await repository.addHistory(historyInput('current-request'));
+    await repository.addDictionaryEntry({ original: 'cat', translation: 'кот', note: 'current' });
+
+    const importedStorage = new MemoryStorage();
+    const importedRepository = new StorageRepository(importedStorage);
+    await importedRepository.updateSettings({ sourceMode: 'ru', textScale: 130 });
+    await importedRepository.addHistory(historyInput('imported-request'));
+    await importedRepository.addDictionaryEntry({ original: 'cat', translation: 'кот', note: 'backup' });
+    await importedRepository.addDictionaryEntry({ original: 'dog', translation: 'собака', note: '' });
+    const backup = createBackup(await importedRepository.loadState(), new Date('2026-09-13T10:00:00.000Z'));
+    backup.data.history.push({ ...backup.data.history[0]! });
+    backup.data.dictionary.push({ ...backup.data.dictionary.find((entry) => entry.original === 'dog')! });
+
+    const result = await repository.importBackup(backup);
+    const state = await repository.loadState();
+
+    expect(result).toEqual({ historyAdded: 1, dictionaryAdded: 1 });
+    expect(state.settings).toMatchObject({ sourceMode: 'ru', textScale: 130 });
+    expect(state.history.map((entry) => entry.requestId).sort()).toEqual(['current-request', 'imported-request']);
+    expect(state.dictionary.map((entry) => entry.original).sort()).toEqual(['cat', 'dog']);
+  });
+
+  it('rejects files that are not poop translator backups without changing data', async () => {
+    const storage = new MemoryStorage();
+    const repository = new StorageRepository(storage);
+    await repository.addDictionaryEntry({ original: 'cat', translation: 'кот', note: '' });
+
+    await expect(repository.importBackup({ format: 'unknown', version: 1, data: {} }))
+      .rejects.toThrow('Файл не похож на резервную копию poop translator');
+
+    expect((await repository.loadState()).dictionary.map((entry) => entry.original)).toEqual(['cat']);
   });
 });

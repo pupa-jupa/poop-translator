@@ -1,15 +1,18 @@
 import type {
   DictionaryEntry,
   DictionaryInput,
+  ExtensionBackup,
   ExtensionState,
   HistoryEntry,
   HistoryInput,
   Settings,
   StorageAreaLike,
+  TextScale,
 } from '../shared/types';
 
 export const STORAGE_KEY = 'poopTranslatorState';
 const HISTORY_LIMIT = 500;
+const DEFAULT_TEXT_SCALE: TextScale = 115;
 
 export const DEFAULT_STATE: ExtensionState = {
   schemaVersion: 1,
@@ -17,6 +20,7 @@ export const DEFAULT_STATE: ExtensionState = {
     sourceMode: 'en',
     saveHistory: true,
     showSelectionButton: true,
+    textScale: DEFAULT_TEXT_SCALE,
   },
   history: [],
   dictionary: [],
@@ -40,6 +44,9 @@ function normalizedSettings(value: unknown): Settings {
     showSelectionButton: typeof value.showSelectionButton === 'boolean'
       ? value.showSelectionButton
       : DEFAULT_STATE.settings.showSelectionButton,
+    textScale: value.textScale === 100 || value.textScale === 130
+      ? value.textScale
+      : DEFAULT_TEXT_SCALE,
   };
 }
 
@@ -79,6 +86,28 @@ export function normalizeState(value: unknown): ExtensionState {
     history: normalizedHistory(record.history),
     dictionary: normalizedDictionary(record.dictionary),
   };
+}
+
+export function createBackup(
+  state: ExtensionState,
+  exportedAt = new Date(),
+): ExtensionBackup {
+  return {
+    format: 'poop-translator-backup',
+    version: 1,
+    exportedAt: exportedAt.toISOString(),
+    data: normalizeState(state),
+  };
+}
+
+function parseBackup(value: unknown): ExtensionState {
+  if (!isRecord(value)
+    || value.format !== 'poop-translator-backup'
+    || value.version !== 1
+    || !isRecord(value.data)) {
+    throw new Error('Файл не похож на резервную копию poop translator');
+  }
+  return normalizeState(value.data);
 }
 
 function makeId(): string {
@@ -220,6 +249,33 @@ export class StorageRepository {
       state.settings = { ...DEFAULT_STATE.settings };
       state.history = [];
       state.dictionary = [];
+    });
+  }
+
+  async importBackup(value: unknown): Promise<{ historyAdded: number; dictionaryAdded: number }> {
+    const imported = parseBackup(value);
+    return this.mutate((state) => {
+      const historyIds = new Set(state.history.map((entry) => entry.requestId));
+      const importedHistory = imported.history.filter((entry) => {
+        if (historyIds.has(entry.requestId)) return false;
+        historyIds.add(entry.requestId);
+        return true;
+      });
+      const dictionaryKeys = new Set(state.dictionary.map((entry) => dictionaryKey(entry.original, entry.translation)));
+      const importedDictionary = imported.dictionary.filter((entry) => {
+        const key = dictionaryKey(entry.original, entry.translation);
+        if (dictionaryKeys.has(key)) return false;
+        dictionaryKeys.add(key);
+        return true;
+      });
+
+      state.settings = imported.settings;
+      state.history = [...importedHistory, ...state.history]
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, HISTORY_LIMIT);
+      state.dictionary = [...importedDictionary, ...state.dictionary]
+        .sort((left, right) => right.updatedAt - left.updatedAt);
+      return { historyAdded: importedHistory.length, dictionaryAdded: importedDictionary.length };
     });
   }
 }

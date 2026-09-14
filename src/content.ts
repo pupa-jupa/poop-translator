@@ -1,8 +1,10 @@
 import contentStyles from './content.css?inline';
 import { lookupAlternativeVariants } from './core/dictionary-client';
+import { placeFloatingCard } from './core/floating-card';
 import { PageTranslationSession, findMainContent } from './core/page-translation';
 import { STORAGE_KEY } from './core/storage';
 import { getStorageClient } from './core/storage-client';
+import { persistTranslationHistory, type HistoryPersistenceResult } from './core/translation-history';
 import { ChromeTranslator } from './core/translator';
 import { translateFromUserActivation } from './core/user-activated-translation';
 import { createRequestId, isContentRequest, type PageStatus, type RuntimeResponse } from './shared/messages';
@@ -10,7 +12,7 @@ import type { DictionaryVariant, Settings, SourceMode, TranslationResult, Transl
 
 const engine = new ChromeTranslator();
 const repository = getStorageClient();
-let settings: Settings = { sourceMode: 'en', saveHistory: true, showSelectionButton: true };
+let settings: Settings = { sourceMode: 'en', saveHistory: true, showSelectionButton: true, textScale: 115 };
 let host: HTMLDivElement | undefined;
 let layer: HTMLDivElement | undefined;
 let selectionButton: HTMLButtonElement | undefined;
@@ -35,6 +37,7 @@ function ensureLayer(): HTMLDivElement {
   if (layer) return layer;
   host = document.createElement('div');
   host.dataset.poopTranslatorRoot = '';
+  host.dataset.textScale = String(settings.textScale);
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent = contentStyles;
@@ -49,11 +52,17 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-function pointForCard(rect?: DOMRect): { left: number; top: number } {
-  const width = Math.min(350, window.innerWidth - 24);
-  const left = clamp(rect ? rect.left : (window.innerWidth - width) / 2, 12, window.innerWidth - width - 12);
-  const preferredTop = rect ? rect.bottom + 10 : Math.max(12, (window.innerHeight - 300) / 2);
-  return { left, top: clamp(preferredTop, 12, window.innerHeight - 280) };
+function positionCardElement(element: HTMLElement, anchor?: DOMRect): void {
+  const measured = element.getBoundingClientRect();
+  const point = placeFloatingCard({
+    anchor,
+    cardWidth: measured.width,
+    cardHeight: measured.height,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+  });
+  element.style.setProperty('--pt-left', `${point.left}px`);
+  element.style.setProperty('--pt-top', `${point.top}px`);
 }
 
 function removeSelectionButton(): void {
@@ -116,17 +125,18 @@ function cardShell(original: string, rect?: DOMRect): {
   variants: HTMLElement;
   variantsList: HTMLElement;
   actions: HTMLDivElement;
+  anchor?: DOMRect;
 } {
   closeCard();
-  const point = pointForCard(rect);
   const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
   const element = document.createElement('div');
   element.className = 'pt-card';
   element.setAttribute('role', 'dialog');
   element.setAttribute('aria-label', 'Перевод');
   element.tabIndex = -1;
-  element.style.setProperty('--pt-left', `${point.left}px`);
-  element.style.setProperty('--pt-top', `${point.top}px`);
+  element.style.setProperty('--pt-left', '12px');
+  element.style.setProperty('--pt-top', '12px');
+  element.style.visibility = 'hidden';
   element.innerHTML = `
     <div class="pt-card-header">
       <span class="pt-card-mark">${poopSvg}</span>
@@ -150,6 +160,8 @@ function cardShell(original: string, rect?: DOMRect): {
   ensureLayer().append(element);
   card = element;
   cardPreviousFocus = previousFocus;
+  positionCardElement(element, rect);
+  element.style.visibility = '';
   element.focus({ preventScroll: true });
   return {
     element,
@@ -158,6 +170,7 @@ function cardShell(original: string, rect?: DOMRect): {
     variants: element.querySelector<HTMLElement>('.pt-variants')!,
     variantsList: element.querySelector<HTMLElement>('.pt-variants__list')!,
     actions: element.querySelector<HTMLDivElement>('.pt-actions')!,
+    anchor: rect,
   };
 }
 
@@ -201,22 +214,23 @@ async function showAlternativeVariants(view: CardView, result: TranslationResult
   if (!view.element.isConnected || card !== view.element || !variants.length) return;
   view.variantsList.append(...variants.map((variant) => createVariantButton(result, variant)));
   view.variants.hidden = false;
+  positionCardElement(view.element, view.anchor);
 }
 
 async function saveSuccessfulTranslation(
   result: TranslationResult,
   source: TranslationSource,
   requestId: string,
-): Promise<void> {
-  if (result.alreadyRussian) return;
-  await repository.addHistory({
+): Promise<HistoryPersistenceResult> {
+  if (result.alreadyRussian) return { status: 'skipped' };
+  return persistTranslationHistory(() => repository.addHistory({
     requestId,
     original: result.original,
     translation: result.translation,
     sourceLanguage: result.sourceLanguage,
     targetLanguage: result.targetLanguage,
     source,
-  });
+  }));
 }
 
 async function showTranslationCard(
@@ -230,8 +244,10 @@ async function showTranslationCard(
   const view = cardShell(text, rect);
 
   const run = async () => {
+    view.status.hidden = false;
     view.status.dataset.kind = '';
     view.status.innerHTML = '<span class="pt-spinner"></span><span>Готовлю переводчик…</span>';
+    view.translation.hidden = true;
     view.actions.replaceChildren();
     try {
       const result = await translateFromUserActivation(engine, text, sourceMode, {
@@ -246,20 +262,28 @@ async function showTranslationCard(
       view.translation.textContent = result.alreadyRussian ? 'Текст уже на русском' : result.translation;
       const copy = makeButton('Копировать');
       copy.addEventListener('click', () => {
-        void navigator.clipboard.writeText(result.translation).then(() => showToast('Скопировано'));
+        void navigator.clipboard.writeText(result.translation)
+          .then(() => showToast('Скопировано'))
+          .catch(() => showToast('Не удалось скопировать'));
       });
       const add = makeButton('В словарь', 'pt-button pt-button--primary');
-      add.addEventListener('click', async () => {
-        const added = await repository.addDictionaryEntry({
+      add.addEventListener('click', () => {
+        add.disabled = true;
+        void repository.addDictionaryEntry({
           original: result.original,
           translation: result.translation,
+        }).then((added) => {
+          add.textContent = added.added ? 'Добавлено ✓' : 'Уже в словаре';
+        }).catch(() => {
+          add.disabled = false;
+          showToast('Не удалось добавить перевод в словарь');
         });
-        add.textContent = added.added ? 'Добавлено ✓' : 'Уже в словаре';
-        add.disabled = true;
       });
       if (!result.alreadyRussian) view.actions.append(copy, add);
-      void showAlternativeVariants(view, result);
-      await saveSuccessfulTranslation(result, source, requestId);
+      positionCardElement(view.element, view.anchor);
+      void showAlternativeVariants(view, result).catch(() => undefined);
+      const historyResult = await saveSuccessfulTranslation(result, source, requestId);
+      if (historyResult.status === 'failed') showToast('Перевод готов, историю сохранить не удалось');
     } catch (error) {
       if (!view.element.isConnected) return;
       const message = error instanceof Error ? error.message : 'Не удалось выполнить перевод.';
@@ -268,6 +292,7 @@ async function showTranslationCard(
       const retry = makeButton('Повторить', 'pt-button pt-button--primary');
       retry.addEventListener('click', () => void run());
       view.actions.replaceChildren(retry);
+      positionCardElement(view.element, view.anchor);
     }
   };
 
@@ -458,6 +483,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local' || !changes[STORAGE_KEY]) return;
   void repository.loadState().then((state) => {
     settings = state.settings;
+    if (host) host.dataset.textScale = String(settings.textScale);
     if (!settings.showSelectionButton) removeSelectionButton();
   });
 });

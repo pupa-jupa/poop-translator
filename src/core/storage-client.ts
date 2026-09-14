@@ -3,6 +3,7 @@ import { createRequestId } from '../shared/messages';
 import type {
   DictionaryEntry,
   DictionaryInput,
+  BackupImportResult,
   ExtensionState,
   HistoryInput,
   Settings,
@@ -17,7 +18,8 @@ export type StorageMutationOperation =
   | 'updateDictionaryEntry'
   | 'removeDictionaryEntry'
   | 'clearDictionary'
-  | 'clearUserData';
+  | 'clearUserData'
+  | 'importBackup';
 
 export interface StorageMutationMessage {
   type: 'STORAGE_MUTATION';
@@ -37,17 +39,76 @@ type ReadState = () => Promise<ExtensionState>;
 
 const operations = new Set<StorageMutationOperation>([
   'updateSettings', 'addHistory', 'removeHistoryEntry', 'clearHistory', 'addDictionaryEntry',
-  'updateDictionaryEntry', 'removeDictionaryEntry', 'clearDictionary', 'clearUserData',
+  'updateDictionaryEntry', 'removeDictionaryEntry', 'clearDictionary', 'clearUserData', 'importBackup',
 ]);
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isString(value: unknown, maxLength: number, allowEmpty = false): value is string {
+  return typeof value === 'string'
+    && value.length <= maxLength
+    && (allowEmpty || value.trim().length > 0);
+}
+
+function isSettingsPatch(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (value.sourceMode === undefined || value.sourceMode === 'en' || value.sourceMode === 'ru' || value.sourceMode === 'auto')
+    && (value.saveHistory === undefined || typeof value.saveHistory === 'boolean')
+    && (value.showSelectionButton === undefined || typeof value.showSelectionButton === 'boolean')
+    && (value.textScale === undefined || value.textScale === 100 || value.textScale === 115 || value.textScale === 130);
+}
+
+function isDictionaryInput(value: unknown): boolean {
+  return isRecord(value)
+    && isString(value.original, 500)
+    && isString(value.translation, 500)
+    && (value.note === undefined || isString(value.note, 1_000, true));
+}
+
+function isHistoryInput(value: unknown): boolean {
+  return isRecord(value)
+    && isString(value.requestId, 200)
+    && isString(value.original, 10_000)
+    && isString(value.translation, 10_000)
+    && (value.sourceLanguage === 'en' || value.sourceLanguage === 'ru')
+    && (value.targetLanguage === 'en' || value.targetLanguage === 'ru')
+    && (value.source === 'manual' || value.source === 'selection' || value.source === 'context-menu');
+}
+
+function hasValidPayload(operation: StorageMutationOperation, payload: unknown): boolean {
+  switch (operation) {
+    case 'updateSettings': return isSettingsPatch(payload);
+    case 'addHistory': return isHistoryInput(payload);
+    case 'addDictionaryEntry': return isDictionaryInput(payload);
+    case 'updateDictionaryEntry':
+      return isRecord(payload) && isString(payload.id, 200) && isDictionaryInput(payload.input);
+    case 'removeHistoryEntry':
+    case 'removeDictionaryEntry':
+      return isString(payload, 200);
+    case 'importBackup':
+      return isRecord(payload)
+        && payload.format === 'poop-translator-backup'
+        && payload.version === 1
+        && isRecord(payload.data);
+    case 'clearHistory':
+    case 'clearDictionary':
+    case 'clearUserData':
+      return payload === undefined;
+  }
+}
+
 export function isStorageMutationMessage(value: unknown): value is StorageMutationMessage {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
+  const record = value;
+  const operation = record.operation;
   return record.type === 'STORAGE_MUTATION'
     && typeof record.requestId === 'string'
     && record.requestId.startsWith('pt-')
-    && typeof record.operation === 'string'
-    && operations.has(record.operation as StorageMutationOperation);
+    && typeof operation === 'string'
+    && operations.has(operation as StorageMutationOperation)
+    && hasValidPayload(operation as StorageMutationOperation, record.payload);
 }
 
 async function defaultReadState(): Promise<ExtensionState> {
@@ -107,6 +168,10 @@ export class StorageClient {
 
   clearUserData(): Promise<void> {
     return this.mutate('clearUserData');
+  }
+
+  importBackup(value: unknown): Promise<BackupImportResult> {
+    return this.mutate('importBackup', value);
   }
 }
 

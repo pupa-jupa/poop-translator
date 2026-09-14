@@ -45,4 +45,17 @@ describe('popup shell', () => {
     expect(variants?.getAttribute('aria-label')).toBe('Варианты перевода');
     expect(variants?.querySelector('[data-result-variants-list]')).not.toBeNull();
   });
+
+  it('provides readable text scale and local backup controls', () => {
+    const root = document.createElement('div');
+    mountPopupShell(root);
+
+    const scales = Array.from(root.querySelectorAll<HTMLOptionElement>('[data-control="text-scale"] option'));
+    expect(scales.map((option) => [option.value, option.textContent?.trim()])).toEqual([
+      ['100', 'Обычный'], ['115', 'Крупный'], ['130', 'Очень крупный'],
+    ]);
+    expect(root.querySelector('[data-action="export-data"]')?.textContent).toContain('Экспорт');
+    expect(root.querySelector('[data-action="import-data"]')?.textContent).toContain('Импорт');
+    expect(root.querySelector<HTMLInputElement>('[data-import-file]')?.accept).toBe('application/json,.json');
+  });
 });

@@ -1,6 +1,8 @@
 # Poop Translator Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Архив первоначального плана, проверен 2026-09-13.** Основные функции реализованы в версии 1.1.0. Чекбоксы ниже отражают исходный план, а не текущий список незавершённых задач; историческое выполнение каждого шага red/green здесь не подтверждено. Не запускайте этот план повторно. Текущие инструкции: [AGENTS.md](../../../AGENTS.md); состояние и пробелы: [аудит](../../audit-2026-09-13.md).
+
+Расхождения первоначальных интерфейсов с кодом: `SourceLanguage` заменён на `SourceMode`; вместо `chunkTextNodes` используется `splitText`; команда контекстного меню называется `SHOW_SELECTION_TRANSLATOR`, а не `TRANSLATE_SELECTION`. Состояние изменяется через `StorageClient` и очередь service worker. Подробности — в актуальной спецификации.
 
 **Goal:** Собрать готовое к загрузке расширение Chrome для локального перевода между английским и русским с несколькими словарными значениями.
 

@@ -98,6 +98,9 @@ export function mountPopupShell(root: HTMLElement): void {
             </label>
             <label class="setting-row"><span><strong>Сохранять историю</strong><small>Только ручные и выделенные переводы</small></span><input class="switch" type="checkbox" aria-label="Сохранять историю" data-control="save-history"></label>
             <label class="setting-row"><span><strong>Кнопка у выделения</strong><small>Показывать маленького помощника на страницах</small></span><input class="switch" type="checkbox" aria-label="Показывать кнопку возле выделения" data-control="selection-button"></label>
+            <label class="setting-row setting-row--stack"><span><strong>Размер текста</strong><small>Меняет popup и подсказки на страницах</small></span>
+              <select data-control="text-scale"><option value="100">Обычный</option><option value="115">Крупный</option><option value="130">Очень крупный</option></select>
+            </label>
           </div>
 
           <div class="engine-card">
@@ -108,6 +111,9 @@ export function mountPopupShell(root: HTMLElement): void {
 
           <div class="danger-zone">
             <span class="section-kicker">Данные на устройстве</span>
+            <button type="button" data-action="export-data"><span><strong>Экспорт данных</strong><small>Сохранить JSON с историей и словарём</small></span><span>↓</span></button>
+            <button type="button" data-action="import-data"><span><strong>Импорт данных</strong><small>Объединить с данными на устройстве</small></span><span>↑</span></button>
+            <input type="file" accept="application/json,.json" data-import-file hidden>
             <button type="button" data-action="clear-history-settings"><span><strong>Очистить историю</strong><small>Словарь останется</small></span><span>›</span></button>
             <button type="button" data-action="clear-dictionary"><span><strong>Очистить словарь</strong><small>История останется</small></span><span>›</span></button>
             <button class="danger" type="button" data-action="clear-all"><span><strong>Сбросить все данные</strong><small>Вернуть начальные настройки</small></span><span>›</span></button>
