@@ -2,16 +2,16 @@
   color-scheme: dark;
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-synthesis: none;
-  --bg: #180f17;
-  --surface: #2a1c29;
-  --surface-2: #382235;
-  --surface-3: #482a42;
-  --pink: #ff91c9;
-  --pink-strong: #ffb0d9;
-  --lilac: #dda9ff;
+  --bg: #301020;
+  --surface: #49172f;
+  --surface-2: #65213f;
+  --surface-3: #7d2d51;
+  --pink: #ff91c2;
+  --pink-strong: #ffc2df;
+  --lilac: #ffb5d6;
   --text: #f5f1fa;
   --muted: #c3aebe;
-  --quiet: #93788c;
+  --quiet: #d7a6be;
   --danger: #ff9eae;
   --text-scale: 1.15;
 }
@@ -188,3 +188,25 @@ h2 { margin: 3px 0 0; font-size: 22px; letter-spacing: -.035em; }
 .translate-form textarea { font-size: calc(17px * var(--text-scale)); }
 .result-translation { font-size: calc(18px * var(--text-scale)); }
 h2 { font-size: calc(22px * var(--text-scale)); }
+
+/* Strawberry-night surfaces: pink is the canvas, not only an accent. */
+.app-shell { background: radial-gradient(ellipse at 100% 0, #772445 0, transparent 55%), var(--bg); }
+.brand-mark { border: 2px solid #ffe0ee; border-radius: 17px; box-shadow: 3px 4px 0 #8e3259; transform: rotate(-7deg); }
+.brand-copy h1 { color: #ffe1ee; }
+.brand-header { padding-block: 5px; }
+.tab-bar { background: #49172f; border-color: #a3436b; border-radius: 22px; }
+.tab-bar button { border-radius: 17px; }
+.tab-bar button[aria-selected="true"] { background: #ffabd1; box-shadow: 0 3px 0 #b94a7c; }
+.translate-form, .result-card { border: 1px solid #b6507d; border-radius: 24px; background: #49172f; }
+.translate-form:focus-within { border-color: #ffabd1; box-shadow: 0 0 0 3px #ff91c222; }
+.result-card { background: linear-gradient(145deg, #692441, #49172f); }
+.button--hero, .button--accent { background: #ffabd1; border-radius: 17px; box-shadow: 0 4px 0 #a13a64; }
+.button--hero:hover, .button--accent:hover { background: #ffc2df; }
+.result-variant { background: #762c4c; border-color: #b6507d; border-radius: 15px; }
+.result-variant:hover { background: #8b365c; border-color: #ffabd1; }
+.settings-group, .item-card, .search-box, .engine-card, .engine-pill, .modal { background: #49172f; border-color: #a3436b; }
+.engine-card__icon, .empty-state__face { background: #762c4c; color: #ffc2df; }
+.toast { background: #762c4c; border-color: #ff91c2; }
+textarea::placeholder, input::placeholder { color: #d7a6be; }
+* { scrollbar-color: #e77cac #401329; scrollbar-width: thin; }
+::selection { color: #301020; background: #ffabd1; }

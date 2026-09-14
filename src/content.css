@@ -141,3 +141,15 @@ button { font: inherit; }
 .pt-variant, .pt-status, .pt-button, .pt-toast { font-size: calc(14px * var(--pt-text-scale)); }
 .pt-page-prompt strong { font-size: calc(15px * var(--pt-text-scale)); }
 .pt-page-prompt span { font-size: calc(13px * var(--pt-text-scale)); }
+
+:host { --pt-pink: #ffabd1; --pt-lilac: #ffc2df; --pt-muted: #e0b4ca; --pt-surface-2: #762c4c; }
+.pt-card { border: 2px solid #db78a5; border-radius: 25px; background: linear-gradient(145deg, #692441, #401329); box-shadow: 0 18px 50px #25091688, inset 0 1px #ffd0e6; }
+.pt-card-mark { background: #ffabd1; color: #49172f; border: 2px solid #ffe0ee; border-radius: 11px; transform: rotate(-7deg); }
+.pt-card-title { color: #ffe1ee; }
+.pt-label { color: #ffabd1; }
+.pt-variant { background: #762c4c; border-color: #b6507d; border-radius: 15px; }
+.pt-variant:hover, .pt-button:hover { background: #8b365c; border-color: #ffabd1; }
+.pt-button--primary, .pt-button--primary:hover, .pt-selection-button { background: #ffabd1; color: #401329; }
+.pt-selection-button { border: 2px solid #ffe0ee; box-shadow: 0 4px 0 #a13a64, 0 8px 20px #40132955; }
+.pt-page-prompt, .pt-toast { background: #49172f; border: 1px solid #db78a5; }
+* { scrollbar-color: #e77cac #401329; scrollbar-width: thin; }
