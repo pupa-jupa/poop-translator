@@ -5,6 +5,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: false,
+    copyPublicDir: false,
     lib: {
       entry: resolve(import.meta.dirname, 'src/content.ts'),
       formats: ['iife'],

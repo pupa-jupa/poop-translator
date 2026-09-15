@@ -1,13 +1,77 @@
 import { LocalDictionary } from './core/dictionary';
 import { getStorageRepository } from './core/storage';
 import { isStorageMutationMessage } from './core/storage-client';
-import { createRequestId, isDictionaryLookupRequest } from './shared/messages';
-import type { DictionaryInput, HistoryInput, Settings } from './shared/types';
+import {
+  createRequestId,
+  isDictionaryLookupRequest,
+  isOcrRecognitionResult,
+  isRegionCaptureRequest,
+  type OcrRecognitionRequest,
+  type RegionCaptureRequest,
+  type RuntimeResponse,
+} from './shared/messages';
+import type { DictionaryInput, HistoryInput, OcrRecognitionResult, Settings } from './shared/types';
 
 const MENU_RU_ID = 'poop-translator-selection-ru';
 const MENU_EN_ID = 'poop-translator-selection-en';
 const repository = getStorageRepository();
 const dictionary = new LocalDictionary();
+const OFFSCREEN_DOCUMENT_PATH = 'ocr.html';
+let creatingOffscreenDocument: Promise<void> | undefined;
+
+async function ensureOffscreenDocument(): Promise<void> {
+  const documentUrl = chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH);
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+    documentUrls: [documentUrl],
+  });
+  if (contexts.length > 0) return;
+  if (!creatingOffscreenDocument) {
+    creatingOffscreenDocument = chrome.offscreen.createDocument({
+      url: OFFSCREEN_DOCUMENT_PATH,
+      reasons: [chrome.offscreen.Reason.WORKERS],
+      justification: 'Распознавание выбранной пользователем области локальной OCR-моделью',
+    }).finally(() => {
+      creatingOffscreenDocument = undefined;
+    });
+  }
+  await creatingOffscreenDocument;
+}
+
+async function captureAndRecognizeRegion(
+  message: RegionCaptureRequest,
+  sender: chrome.runtime.MessageSender,
+): Promise<OcrRecognitionResult> {
+  if (!isRegionCaptureRequest(message) || sender.id !== chrome.runtime.id || sender.tab?.id === undefined
+    || sender.tab.windowId === undefined) {
+    throw new Error('Не удалось определить активную вкладку');
+  }
+  const tab = await chrome.tabs.get(sender.tab.id);
+  if (!tab.active) throw new Error('Вернитесь на вкладку и выберите область ещё раз');
+
+  const imageDataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' });
+  const [stillActive] = await chrome.tabs.query({ active: true, windowId: sender.tab.windowId });
+  if (stillActive?.id !== sender.tab.id) {
+    throw new Error('Вкладка изменилась во время снимка. Выберите область ещё раз');
+  }
+  void chrome.tabs.sendMessage(sender.tab.id, {
+    type: 'REGION_OCR_STARTED', requestId: message.requestId,
+  }).catch(() => undefined);
+  await ensureOffscreenDocument();
+  const request: OcrRecognitionRequest = {
+    target: 'offscreen',
+    type: 'OCR_RECOGNIZE',
+    requestId: message.requestId,
+    imageDataUrl,
+    region: message.region,
+    languages: message.languages,
+  };
+  const response = await chrome.runtime.sendMessage<OcrRecognitionRequest, RuntimeResponse<OcrRecognitionResult>>(request);
+  if (!response?.ok || !isOcrRecognitionResult(response.data)) {
+    throw new Error(response?.error || 'Не удалось распознать текст');
+  }
+  return response.data;
+}
 
 async function createContextMenu(): Promise<void> {
   await chrome.contextMenus.removeAll();
@@ -45,7 +109,20 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }).catch(() => undefined);
 });
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command !== 'translate-region' || tab?.id === undefined || !tab.url?.match(/^https?:\/\//)) return;
+  void chrome.tabs.sendMessage(tab.id, {
+    type: 'START_REGION_SELECTION', requestId: createRequestId(),
+  }).catch(() => undefined);
+});
+
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (isRegionCaptureRequest(message)) {
+    void captureAndRecognizeRegion(message, sender)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+    return true;
+  }
   if (isDictionaryLookupRequest(message)) {
     void dictionary.lookup(message.text, message.sourceLanguage)
       .then((data) => sendResponse({ ok: true, data }))

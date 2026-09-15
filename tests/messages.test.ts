@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createRequestId, isContentRequest, isDictionaryLookupRequest } from '../src/shared/messages';
+import {
+  createRequestId,
+  isContentRequest,
+  isDictionaryLookupRequest,
+  isOcrRecognitionRequest,
+  isOcrRecognitionResult,
+  isRegionCaptureRequest,
+} from '../src/shared/messages';
 
 describe('runtime message protocol', () => {
   it('creates distinct request ids safe for deduplication', () => {
@@ -16,6 +23,9 @@ describe('runtime message protocol', () => {
       requestId: 'pt-123',
       sourceMode: 'auto',
     })).toBe(true);
+    expect(isContentRequest({
+      type: 'REGION_OCR_STARTED', requestId: 'pt-region',
+    })).toBe(true);
   });
 
   it('accepts reverse translation and local dictionary lookup requests', () => {
@@ -25,6 +35,46 @@ describe('runtime message protocol', () => {
     expect(isDictionaryLookupRequest({
       type: 'LOOKUP_DICTIONARY', requestId: 'pt-124', text: 'bank', sourceLanguage: 'en',
     })).toBe(true);
+  });
+
+  it('accepts a bounded region capture request and rejects malformed geometry', () => {
+    const region = {
+      left: 100,
+      top: 50,
+      width: 400,
+      height: 250,
+      viewportWidth: 800,
+      viewportHeight: 600,
+    };
+    expect(isRegionCaptureRequest({
+      type: 'CAPTURE_REGION', requestId: 'pt-125', region, languages: ['eng', 'rus'],
+    })).toBe(true);
+    expect(isRegionCaptureRequest({
+      type: 'CAPTURE_REGION', requestId: 'pt-126', region: { ...region, width: -1 }, languages: ['eng'],
+    })).toBe(false);
+    expect(isRegionCaptureRequest({
+      type: 'CAPTURE_REGION', requestId: 'pt-127', region, languages: ['eng', 'deu'],
+    })).toBe(false);
+
+    expect(isOcrRecognitionRequest({
+      target: 'offscreen',
+      type: 'OCR_RECOGNIZE',
+      requestId: 'pt-128',
+      imageDataUrl: 'data:image/png;base64,abcd',
+      region,
+      languages: ['eng', 'rus'],
+    })).toBe(true);
+    expect(isOcrRecognitionRequest({
+      target: 'offscreen',
+      type: 'OCR_RECOGNIZE',
+      requestId: 'pt-129',
+      imageDataUrl: 'https://example.com/capture.png',
+      region,
+      languages: ['eng'],
+    })).toBe(false);
+    expect(isOcrRecognitionResult({ text: 'HELLO OCR', confidence: 85.2 })).toBe(true);
+    expect(isOcrRecognitionResult({ text: 'HELLO OCR', confidence: Number.NaN })).toBe(false);
+    expect(isOcrRecognitionResult({ text: '', confidence: 85.2 })).toBe(true);
   });
 
   it('rejects malformed or unknown runtime messages', () => {

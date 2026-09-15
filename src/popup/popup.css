@@ -110,6 +110,11 @@ textarea::placeholder, input::placeholder { color: #777080; }
 .page-actions { display: flex; gap: 6px; }
 .page-actions .button { min-height: 38px; padding-inline: 11px; font-size: 11px; }
 
+.region-tool { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 10px; margin: 0 0 14px; padding: 12px; border: 1px solid #b6507d; border-radius: 20px; background: linear-gradient(145deg, #762c4c, #49172f); }
+.region-tool__icon { width: 42px; height: 42px; display: grid; place-items: center; border: 2px dashed #ffabd1; border-radius: 14px; color: #ffd0e6; background: #8b365c; font-size: 22px; font-weight: 900; transform: rotate(-3deg); }
+.region-tool p { margin: 3px 0 0; color: #e5bfd1; font-size: 11px; line-height: 1.4; }
+.region-tool .button { min-height: 38px; max-width: 92px; padding-inline: 10px; line-height: 1.2; }
+
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
 h2 { margin: 3px 0 0; font-size: 22px; letter-spacing: -.035em; }
 .search-box { display: flex; align-items: center; gap: 8px; padding: 0 12px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,.06); border-radius: 13px; color: var(--quiet); background: rgba(37,35,46,.76); }
@@ -178,7 +183,7 @@ h2 { margin: 3px 0 0; font-size: 22px; letter-spacing: -.035em; }
 .brand-copy p, .result-variants__head, .text-button, .inline-error, .modal--confirm p { font-size: calc(12px * var(--text-scale)); }
 .engine-pill, .tab-bar button, .language-row label, .target-language small, .composer-footer,
 .button--small, .result-head, .result-variants__head small, .result-variant__meta, .section-kicker,
-.page-tools p, .page-actions .button, .item-meta, .mini-action, .empty-state p,
+.page-tools p, .page-actions .button, .region-tool p, .item-meta, .mini-action, .empty-state p,
 .setting-row small, .danger-zone small, .setting-row--stack select, .engine-card p, .modal label,
 .toast { font-size: calc(11px * var(--text-scale)); }
 .button, .result-original, .result-variant, .search-box input, .setting-row strong,

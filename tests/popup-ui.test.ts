@@ -34,6 +34,13 @@ describe('popup shell', () => {
     expect(root.querySelector('[aria-label="Текст для перевода"]')).not.toBeNull();
     expect(root.querySelector('[aria-label="Сохранять историю"]')).not.toBeNull();
     expect(root.querySelector('[data-action="clear-all"]')?.textContent).toContain('Сбросить все данные');
+    expect(root.querySelector('[data-action="translate-region"]')?.textContent).toContain('Выбрать область');
+    const translatePanel = root.querySelector('[data-view="translate"]');
+    const regionTool = translatePanel?.querySelector('.region-tool');
+    expect(regionTool).not.toBeNull();
+    expect(regionTool!.compareDocumentPosition(
+      translatePanel!.querySelector('.translate-form')!,
+    ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('reserves an accessible result area for alternative meanings', () => {

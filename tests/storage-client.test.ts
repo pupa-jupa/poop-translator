@@ -59,5 +59,13 @@ describe('StorageClient', () => {
       operation: 'addDictionaryEntry',
       payload: { original: 'cat', translation: 'кот', note: '' },
     })).toBe(true);
+    expect(isStorageMutationMessage({
+      ...envelope,
+      operation: 'addHistory',
+      payload: {
+        requestId: 'pt-ocr', original: 'cat', translation: 'кот', sourceLanguage: 'en',
+        targetLanguage: 'ru', source: 'ocr-region',
+      },
+    })).toBe(true);
   });
 });

@@ -90,7 +90,9 @@ function syncSettingsControls(): void {
 }
 
 function sourceLabel(entry: HistoryEntry): string {
-  const labels = { manual: 'вручную', selection: 'выделение', 'context-menu': 'контекстное меню' } as const;
+  const labels = {
+    manual: 'вручную', selection: 'выделение', 'context-menu': 'контекстное меню', 'ocr-region': 'область экрана',
+  } as const;
   return labels[entry.source];
 }
 
@@ -529,6 +531,15 @@ required<HTMLButtonElement>('[data-action="translate-page"]').addEventListener('
   }).catch((error) => {
     renderPageStatus({ state: 'error', completed: 0, total: 0, error: error.message });
   });
+});
+
+required<HTMLButtonElement>('[data-action="translate-region"]').addEventListener('click', () => {
+  void sendToActiveTab<PageStatus>({ type: 'START_REGION_SELECTION', requestId: createRequestId() })
+    .then((response) => {
+      if (!response.ok) throw new Error(response.error ?? 'Страница не ответила.');
+      window.close();
+    })
+    .catch((error) => showToast(error instanceof Error ? error.message : 'Не удалось начать выбор области'));
 });
 
 required<HTMLButtonElement>('[data-action="restore-page"]').addEventListener('click', () => {
