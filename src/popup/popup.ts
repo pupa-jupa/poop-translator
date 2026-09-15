@@ -28,6 +28,7 @@ let engineStatusOperation = 0;
 
 const sourceText = required<HTMLTextAreaElement>('#source-text');
 const charCount = required<HTMLElement>('[data-char-count]');
+const enterHint = required<HTMLElement>('.enter-hint');
 const translateForm = required<HTMLFormElement>('[data-form="translate"]');
 const translateButton = translateForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 const sourceMode = required<HTMLSelectElement>('[data-control="source-mode"]');
@@ -87,6 +88,11 @@ function syncSettingsControls(): void {
     : state.settings.sourceMode === 'auto'
       ? 'EN ↔ RU'
       : 'Русский';
+  sourceText.placeholder = state.settings.sourceMode === 'ru'
+    ? 'Напишите что-нибудь на русском…'
+    : state.settings.sourceMode === 'auto'
+      ? 'Напишите что-нибудь на английском или русском…'
+      : 'Напишите что-нибудь на английском…';
 }
 
 function sourceLabel(entry: HistoryEntry): string {
@@ -103,7 +109,7 @@ function formattedDate(timestamp: number): string {
 function emptyState(icon: string, title: string, description: string): HTMLElement {
   const element = document.createElement('div');
   element.className = 'empty-state';
-  element.innerHTML = `<div class="empty-state__face"></div><strong></strong><p></p>`;
+  element.innerHTML = `<div class="empty-state__face" aria-hidden="true"></div><strong></strong><p></p>`;
   element.querySelector('.empty-state__face')!.textContent = icon;
   element.querySelector('strong')!.textContent = title;
   element.querySelector('p')!.textContent = description;
@@ -135,7 +141,7 @@ function renderHistory(): void {
     const card = document.createElement('article');
     card.className = 'item-card';
     card.innerHTML = `
-      <div class="item-main"><p></p><span class="item-arrow">→</span><p></p></div>
+      <div class="item-main"><p></p><span class="item-arrow" aria-hidden="true">→</span><p></p></div>
       <div class="item-meta"><span></span><div class="item-buttons"></div></div>`;
     const paragraphs = card.querySelectorAll('p');
     paragraphs[0]!.textContent = entry.original;
@@ -186,7 +192,7 @@ function renderDictionary(): void {
     const card = document.createElement('article');
     card.className = 'item-card';
     card.innerHTML = `
-      <div class="item-main"><p></p><span class="item-arrow">→</span><p></p></div>
+      <div class="item-main"><p></p><span class="item-arrow" aria-hidden="true">→</span><p></p></div>
       <div class="item-meta"><span></span><div class="item-buttons"></div></div>`;
     const paragraphs = card.querySelectorAll('p');
     paragraphs[0]!.textContent = entry.original;
@@ -601,6 +607,10 @@ chrome.runtime.onMessage.addListener((message: unknown) => {
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && changes[STORAGE_KEY]) void refreshState();
 });
+
+if (navigator.userAgent.includes('Mac')) {
+  enterHint.textContent = 'Cmd + Enter';
+}
 
 void (async () => {
   await refreshState();
