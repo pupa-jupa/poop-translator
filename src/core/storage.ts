@@ -111,9 +111,15 @@ function parseBackup(value: unknown): ExtensionState {
 }
 
 function makeId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return (crypto as Crypto).randomUUID();
+  }
+  if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
+    const array = new Uint32Array(4);
+    (crypto as Crypto).getRandomValues(array);
+    return `${Date.now()}-${Array.from(array, (dec) => dec.toString(16).padStart(8, '0')).join('')}`;
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function dictionaryKey(original: string, translation: string): string {
