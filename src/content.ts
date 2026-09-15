@@ -403,12 +403,13 @@ function showRecognizedTranslationError(
   view: CardView,
   editor: HTMLTextAreaElement,
   message: string,
+  buttonLabel = 'Повторить перевод',
 ): void {
   if (regionOperation !== operation || !view.element.isConnected) return;
   view.status.hidden = false;
   view.status.dataset.kind = 'error';
   view.status.replaceChildren(document.createTextNode(message));
-  const retry = makeButton('Повторить перевод', 'pt-button pt-button--primary');
+  const retry = makeButton(buttonLabel, 'pt-button pt-button--primary');
   retry.addEventListener('click', () => {
     const preparation = trackedPreparation(operation.sourceMode, (percent) => {
       const label = view.status.querySelector('span:last-child');
@@ -536,9 +537,15 @@ async function recognizeSelectedRegion(
     view.status.hidden = false;
     view.status.dataset.kind = '';
     view.status.textContent = response.data.text.length > 10_000
-      ? `Распознано · первые 10 000 символов · точность ${Math.round(response.data.confidence)}%`
-      : `Распознано · точность ${Math.round(response.data.confidence)}%`;
+      ? 'Распознано · первые 10 000 символов'
+      : 'Текст распознан';
     positionCardElement(view.element);
+    if (response.data.confidence < 60) {
+      showRecognizedTranslationError(operation, view, editor,
+        'Не удалось уверенно распознать текст. Проверьте и исправьте его перед переводом или выделите надпись плотнее.',
+        'Перевести этот текст');
+      return;
+    }
     try {
       await renderRecognizedTranslation(
         operation,

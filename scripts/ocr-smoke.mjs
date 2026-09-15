@@ -1,19 +1,36 @@
 import { createServer } from 'node:http';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, readFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { chromium } from 'playwright';
+import sharp from 'sharp';
 
 const extensionPath = resolve('dist');
+const imageFixture = process.env.POOP_OCR_FIXTURE_PATH
+  ? await readFile(process.env.POOP_OCR_FIXTURE_PATH)
+  : await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="660" height="180">
+      <rect width="660" height="180" fill="#785e6d"/>
+      <path d="M0 0H220V180H0Z" fill="#a17d88"/><path d="M440 0H660V180H440Z" fill="#536c62"/>
+      <circle cx="95" cy="65" r="45" fill="#b8bb84"/><rect x="275" y="25" width="115" height="80" rx="18" fill="#cebec0"/>
+      <circle cx="550" cy="65" r="45" fill="#bf9eae"/>
+      <g fill="white" font-family="Arial, sans-serif" font-size="26">
+        <text x="18" y="150">Read this image</text><text x="238" y="150">Keep learning</text><text x="463" y="150">Small steps</text>
+      </g></svg>`)).png().toBuffer();
 const profileRoot = resolve('.tmp-chrome-profile-ocr');
 await mkdir(profileRoot, { recursive: true });
 const profilePath = await mkdtemp(join(profileRoot, 'run-'));
 if (!profilePath.startsWith(`${profileRoot}${sep}`)) throw new Error('Unsafe browser profile path');
 
-const server = createServer((_request, response) => {
+const server = createServer((request, response) => {
+  if (request.url === '/fixture.png' && imageFixture) {
+    response.writeHead(200, { 'content-type': 'image/png' });
+    response.end(imageFixture);
+    return;
+  }
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
   response.end(`<!doctype html><html><body style="margin:80px;background:#fff">
     <div id="ocr-fixture" style="display:inline-block;padding:18px;color:#000;font:700 48px/1 Arial,sans-serif">HELLO OCR</div>
     <div id="ocr-russian" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 48px/1 Arial,sans-serif">ПРИВЕТ</div>
+    ${imageFixture ? '<img id="ocr-image" src="/fixture.png" style="display:block;margin-top:20px" />' : ''}
   </body></html>`);
 });
 await new Promise((resolveServer) => server.listen(0, '127.0.0.1', resolveServer));
@@ -90,7 +107,38 @@ try {
   await editor.waitFor({ timeout: 90_000 });
   const russianText = (await editor.inputValue()).replace(/\s+/g, ' ').trim().toUpperCase();
   if (!russianText.includes('ПРИВЕТ')) throw new Error(`Unexpected Russian OCR result: ${JSON.stringify(russianText)}`);
-  console.log(JSON.stringify({ localOcr: true, english: text, russian: russianText }, null, 2));
+  let imageText;
+  if (imageFixture) {
+    await page.keyboard.press('Escape');
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
+    await options.evaluate(() => chrome.runtime.sendMessage({
+      type: 'STORAGE_MUTATION', requestId: 'pt-ocr-image-mode',
+      operation: 'updateSettings', payload: { sourceMode: 'auto' },
+    }));
+    await options.close();
+    await page.bringToFront();
+    await worker.evaluate((id) => chrome.tabs.sendMessage(id, {
+      type: 'START_REGION_SELECTION', requestId: 'pt-ocr-image-start',
+    }), tabId);
+    await overlay.waitFor();
+    const imageBox = await page.locator('#ocr-image').boundingBox();
+    if (!imageBox) throw new Error('Image fixture missing');
+    await page.mouse.move(imageBox.x, imageBox.y);
+    await page.mouse.down();
+    await page.mouse.move(imageBox.x + imageBox.width, imageBox.y + imageBox.height, { steps: 4 });
+    await page.mouse.up();
+    await editor.waitFor({ timeout: 90_000 });
+    imageText = (await editor.inputValue()).replace(/\s+/g, ' ').trim();
+    const expected = process.env.POOP_OCR_EXPECTED_TEXT
+      ?? (process.env.POOP_OCR_FIXTURE_PATH ? '' : 'Read this image|Keep learning|Small steps');
+    for (const phrase of expected.split('|').filter(Boolean)) {
+      if (!imageText.toLowerCase().includes(phrase.toLowerCase())) {
+        throw new Error(`Image OCR missed ${JSON.stringify(phrase)}: ${JSON.stringify(imageText)}`);
+      }
+    }
+  }
+  console.log(JSON.stringify({ localOcr: true, english: text, russian: russianText, imageText }, null, 2));
 } finally {
   await context.close();
   await new Promise((resolveServer) => server.close(resolveServer));
