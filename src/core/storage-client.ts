@@ -74,7 +74,8 @@ function isHistoryInput(value: unknown): boolean {
     && isString(value.translation, 10_000)
     && (value.sourceLanguage === 'en' || value.sourceLanguage === 'ru')
     && (value.targetLanguage === 'en' || value.targetLanguage === 'ru')
-    && (value.source === 'manual' || value.source === 'selection' || value.source === 'context-menu');
+    && (value.source === 'manual' || value.source === 'selection' || value.source === 'context-menu'
+      || value.source === 'ocr-region');
 }
 
 function hasValidPayload(operation: StorageMutationOperation, payload: unknown): boolean {

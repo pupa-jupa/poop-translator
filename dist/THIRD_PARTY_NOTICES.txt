@@ -19,3 +19,16 @@ License text: https://creativecommons.org/licenses/by-sa/3.0/legalcode
 The data was transformed into compact JSON files split by translation direction
 and first letter. U+0301 stress marks and source markup were removed for display.
 The transformed data is distributed under the same CC BY-SA 3.0 terms.
+
+Tesseract.js 7.0.0 and tesseract.js-core 7.0.0 are distributed under the
+Apache License 2.0: https://github.com/naptha/tesseract.js
+
+English and Russian OCR language packages @tesseract.js-data/eng 1.0.0 and
+@tesseract.js-data/rus 1.0.0 declare MIT in their npm package metadata.
+The bundled 4.0.0_best_int models are based on tessdata_best, whose source
+repository licenses all its trained models under Apache License 2.0:
+https://github.com/tesseract-ocr/tessdata_best
+
+The complete Apache License 2.0 text and the worker's third-party notices
+are included under the extension's ocr/ directory. OCR files are bundled
+locally; the extension does not load them from a CDN at runtime.

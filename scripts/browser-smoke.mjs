@@ -13,6 +13,7 @@ const server = createServer((_request, response) => {
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
   response.end(`<!doctype html><html><body><main style="max-width:600px;margin:80px auto;font:18px sans-serif">
     <h1>Test article</h1><p id="select-me">Hello world from the translation smoke test.</p>
+    <div id="ocr-me" style="display:inline-block;padding:14px;background:#fff;color:#000;font:700 42px/1 Arial,sans-serif">OCR TEST</div>
     <button id="site-button">Site button</button></main></body></html>`);
 });
 await new Promise((resolveServer) => server.listen(0, '127.0.0.1', resolveServer));
@@ -234,6 +235,55 @@ try {
     return tabs.find((tab) => tab.url === url)?.id;
   }, page.url());
   if (!tabId) throw new Error('Could not resolve the test page tab');
+  await page.bringToFront();
+  await worker.evaluate((id) => chrome.tabs.sendMessage(id, {
+    type: 'START_REGION_SELECTION', requestId: 'pt-smoke-region-start',
+  }), tabId);
+  const regionOverlay = page.locator('[data-poop-translator-root] .pt-region-overlay');
+  await regionOverlay.waitFor();
+  await page.keyboard.press('Tab');
+  const cancelFocused = await regionOverlay.getByRole('button', { name: 'Отмена' })
+    .evaluate((button) => button.getRootNode().activeElement === button);
+  if (!cancelFocused) throw new Error('Region overlay did not keep keyboard focus on its cancel button');
+  await page.keyboard.press('Tab');
+  const focusStayed = await regionOverlay.getByRole('button', { name: 'Отмена' })
+    .evaluate((button) => button.getRootNode().activeElement === button);
+  if (!focusStayed) throw new Error('Tab escaped the region overlay into the underlying page');
+  await regionOverlay.getByRole('button', { name: 'Отмена' }).click();
+  await regionOverlay.waitFor({ state: 'detached' });
+  await worker.evaluate((id) => chrome.tabs.sendMessage(id, {
+    type: 'START_REGION_SELECTION', requestId: 'pt-smoke-region-restart',
+  }), tabId);
+  await regionOverlay.waitFor();
+  const ocrBox = await page.locator('#ocr-me').boundingBox();
+  if (!ocrBox) throw new Error('Could not measure OCR fixture');
+  await page.mouse.move(ocrBox.x + 2, ocrBox.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(ocrBox.x + ocrBox.width - 2, ocrBox.y + ocrBox.height - 2, { steps: 4 });
+  await page.mouse.up();
+  await regionOverlay.waitFor({ state: 'detached' });
+  const ocrEditor = page.locator('[data-poop-translator-root] .pt-ocr-editor');
+  const ocrFailure = page.locator('[data-poop-translator-root] .pt-status[data-kind="error"]');
+  try {
+    await Promise.race([
+      ocrEditor.waitFor({ timeout: 90_000 }),
+      ocrFailure.waitFor({ timeout: 90_000 }).then(() => { throw new Error('OCR error card became visible'); }),
+    ]);
+  } catch (error) {
+    const regionDiagnostics = await page.locator('[data-poop-translator-root]').evaluate((host) => ({
+      card: host.shadowRoot?.querySelector('.pt-card')?.textContent,
+      overlay: Boolean(host.shadowRoot?.querySelector('.pt-region-overlay')),
+    }));
+    const runtimeDiagnostics = await worker.evaluate(async () => ({
+      contexts: await chrome.runtime.getContexts({}),
+    }));
+    throw new Error(`OCR UI timeout: page=${JSON.stringify(regionDiagnostics)}; runtime=${JSON.stringify(runtimeDiagnostics)}; workerConsole=${workerMessages.join(' | ')}; cause=${error.message}`);
+  }
+  const recognizedText = (await ocrEditor.inputValue()).replace(/\s+/g, ' ').toUpperCase();
+  if (!recognizedText.includes('OCR TEST')) {
+    throw new Error(`Local OCR returned unexpected text: ${JSON.stringify(recognizedText)}`);
+  }
+  await page.keyboard.press('Escape');
   await worker.evaluate(async (id) => {
     await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-1', sourceMode: 'en' });
     await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-2', sourceMode: 'en' });

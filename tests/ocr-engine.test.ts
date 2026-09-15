@@ -1,0 +1,52 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({ createWorker: vi.fn() }));
+vi.mock('tesseract.js', () => ({
+  createWorker: mocks.createWorker, OEM: { LSTM_ONLY: 1 }, PSM: { SPARSE_TEXT: '11' },
+}));
+
+describe('local OCR fallback lifecycle', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubGlobal('chrome', { runtime: { getURL: (path: string) => `chrome-extension://test/${path}` } });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(), putImageData: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray([255, 255, 255, 255]) }),
+    } as unknown as CanvasRenderingContext2D);
+  });
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it('does not add a second pass to confident plain text', async () => {
+    const recognize = vi.fn().mockResolvedValue({ data: { text: 'HELLO OCR', confidence: 95 } });
+    mocks.createWorker.mockResolvedValue({ recognize, setParameters: vi.fn() });
+    const { recognizeCanvas } = await import('../src/ocr/tesseract-engine');
+    expect(await recognizeCanvas(document.createElement('canvas'), ['eng']))
+      .toEqual({ text: 'HELLO OCR', confidence: 95 });
+    expect(recognize).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries uncertain text with the photo mask and keeps confident lines', async () => {
+    const recognize = vi.fn()
+      .mockResolvedValueOnce({ data: { text: 'D) Ta', confidence: 30 } })
+      .mockResolvedValueOnce({ data: { blocks: [{ paragraphs: [{ lines: [
+        { text: 'Read this image', confidence: 93 }, { text: 'D)', confidence: 90 },
+      ] }] }] } });
+    mocks.createWorker.mockResolvedValue({ recognize, setParameters: vi.fn() });
+    const { recognizeCanvas } = await import('../src/ocr/tesseract-engine');
+    expect(await recognizeCanvas(document.createElement('canvas'), ['eng']))
+      .toEqual({ text: 'Read this image', confidence: 93 });
+    expect(recognize).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves recognized text if the optional second pass fails', async () => {
+    const recognize = vi.fn()
+      .mockResolvedValueOnce({ data: { text: 'Some text', confidence: 50 } })
+      .mockRejectedValueOnce(new Error('Worker stopped'));
+    const terminate = vi.fn().mockResolvedValue(undefined);
+    mocks.createWorker.mockResolvedValue({ recognize, setParameters: vi.fn(), terminate });
+    const { recognizeCanvas } = await import('../src/ocr/tesseract-engine');
+    expect(await recognizeCanvas(document.createElement('canvas'), ['eng']))
+      .toEqual({ text: 'Some text', confidence: 50 });
+    expect(terminate).toHaveBeenCalledTimes(1);
+  });
+});

@@ -42,6 +42,12 @@ export function mountPopupShell(root: HTMLElement): void {
             <div class="target-language"><small>Перевод</small><strong data-target-language>Русский</strong></div>
           </div>
 
+          <section class="region-tool">
+            <div class="region-tool__icon" aria-hidden="true">⌗</div>
+            <div><span class="section-kicker">Текст на картинке</span><p>Выделите область страницы — распознаю и переведу её локально.</p></div>
+            <button class="button button--accent button--small" type="button" data-action="translate-region">Выбрать область</button>
+          </section>
+
           <form class="translate-form" data-form="translate">
             <label class="sr-only" for="source-text">Текст для перевода</label>
             <textarea id="source-text" aria-label="Текст для перевода" maxlength="10000" placeholder="Напишите что-нибудь на английском…"></textarea>
@@ -96,7 +102,7 @@ export function mountPopupShell(root: HTMLElement): void {
             <label class="setting-row setting-row--stack"><span><strong>Направление перевода</strong><small>Английский ↔ русский или автоматический выбор</small></span>
               <select data-control="settings-source-mode"><option value="en">EN → RU</option><option value="ru">RU → EN</option><option value="auto">Авто EN ↔ RU</option></select>
             </label>
-            <label class="setting-row"><span><strong>Сохранять историю</strong><small>Только ручные и выделенные переводы</small></span><input class="switch" type="checkbox" aria-label="Сохранять историю" data-control="save-history"></label>
+            <label class="setting-row"><span><strong>Сохранять историю</strong><small>Ручные, выделенные и OCR-переводы</small></span><input class="switch" type="checkbox" aria-label="Сохранять историю" data-control="save-history"></label>
             <label class="setting-row"><span><strong>Кнопка у выделения</strong><small>Показывать маленького помощника на страницах</small></span><input class="switch" type="checkbox" aria-label="Показывать кнопку возле выделения" data-control="selection-button"></label>
             <label class="setting-row setting-row--stack"><span><strong>Размер текста</strong><small>Меняет popup и подсказки на страницах</small></span>
               <select data-control="text-scale"><option value="100">Обычный</option><option value="115">Крупный</option><option value="130">Очень крупный</option></select>

@@ -15,3 +15,12 @@
 - Текст лицензии: https://creativecommons.org/licenses/by-sa/3.0/legalcode
 
 Данные преобразованы в компактные JSON-файлы, разбитые по направлению и первой букве. Ударения U+0301 и служебная разметка источника удалены для более чистого отображения; значения и обозначения частей речи сохранены. Преобразованные данные распространяются на тех же условиях CC BY-SA 3.0.
+
+## Tesseract.js и OCR-модели
+
+Локальное распознавание использует следующие пакеты, включённые в собранное расширение:
+
+- `tesseract.js` 7.0.0 и `tesseract.js-core` 7.0.0 — Apache License 2.0, проект [naptha/tesseract.js](https://github.com/naptha/tesseract.js);
+- `@tesseract.js-data/eng` 1.0.0 и `@tesseract.js-data/rus` 1.0.0 — в метаданных npm-пакетов указана MIT; сами модели `4.0.0_best_int` основаны на [tessdata_best](https://github.com/tesseract-ocr/tessdata_best), где данные лицензированы под Apache-2.0.
+
+Worker, WebAssembly core и сжатые модели поставляются локально в `dist/ocr/`. Они не загружаются с CDN во время работы расширения. В `dist/ocr/LICENSE-APACHE-2.0.txt` включён полный текст Apache-2.0; уведомления о стороннем коде в worker лежат рядом с ним.

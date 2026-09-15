@@ -1,6 +1,38 @@
 export type SourceMode = 'en' | 'ru' | 'auto';
 export type TextScale = 100 | 115 | 130;
-export type TranslationSource = 'manual' | 'selection' | 'context-menu';
+export type TranslationSource = 'manual' | 'selection' | 'context-menu' | 'ocr-region';
+export type OcrLanguage = 'eng' | 'rus';
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface Size {
+  width: number;
+  height: number;
+}
+
+export interface RegionRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+export interface BitmapRegion {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface OcrRecognitionResult {
+  text: string;
+  confidence: number;
+}
 
 export interface Settings {
   sourceMode: SourceMode;

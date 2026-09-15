@@ -60,7 +60,7 @@ function normalizedHistory(value: unknown): HistoryEntry[] {
       && nonEmptyString(entry.translation)
       && nonEmptyString(entry.sourceLanguage)
       && (entry.targetLanguage === 'ru' || entry.targetLanguage === 'en')
-      && ['manual', 'selection', 'context-menu'].includes(String(entry.source))
+      && ['manual', 'selection', 'context-menu', 'ocr-region'].includes(String(entry.source))
       && typeof entry.createdAt === 'number';
   }).slice(0, HISTORY_LIMIT);
 }
