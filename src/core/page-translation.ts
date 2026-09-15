@@ -3,15 +3,14 @@ const SKIPPED_TAGS = new Set([
 ]);
 
 function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
-    const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
-    const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
-  }
+  if (!element) return false;
+  if (SKIPPED_TAGS.has(element.tagName)) return true;
+  if (element.hasAttribute('hidden') || element.getAttribute('aria-hidden') === 'true') return true;
+  if (element.hasAttribute('data-poop-translator-root')) return true;
+  const editable = element.getAttribute('contenteditable');
+  if ((element instanceof HTMLElement && element.isContentEditable) || (editable !== null && editable !== 'false')) return true;
+  const style = element instanceof HTMLElement ? getComputedStyle(element) : undefined;
+  if (style?.display === 'none' || style?.visibility === 'hidden') return true;
   return false;
 }
 
@@ -21,16 +20,28 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
+      if (node.nodeType === 1) { // ELEMENT_NODE
+        // ⚡ Bolt Optimization: By evaluating visibility and classes on the Element itself
+        // and returning FILTER_REJECT, we entirely skip processing all of its descendants.
+        // This avoids N redundant getComputedStyle calls (which cause layout thrashing)
+        // for N text nodes inside a hidden element, reducing traversal time significantly.
+        if (isSkippedElement(node as Element)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_SKIP;
+      }
       const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
+      if (!text.data.trim()) return NodeFilter.FILTER_SKIP;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
   const result: Text[] = [];
   let node: Node | null;
-  while ((node = walker.nextNode())) result.push(node as Text);
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === 3) {
+      result.push(node as Text);
+    }
+  }
   return result;
 }
 
