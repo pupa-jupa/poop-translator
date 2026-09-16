@@ -67,5 +67,27 @@ describe('StorageClient', () => {
         targetLanguage: 'ru', source: 'ocr-region',
       },
     })).toBe(true);
+    expect(isStorageMutationMessage({
+      ...envelope, operation: 'rateReview', payload: { id: 'cat', rating: 'good' },
+    })).toBe(true);
+    expect(isStorageMutationMessage({
+      ...envelope, operation: 'rateReview', payload: { id: 'cat', rating: 'guess' },
+    })).toBe(false);
+    expect(isStorageMutationMessage({
+      ...envelope, operation: 'rateReview', payload: { id: '', rating: 'good' },
+    })).toBe(false);
+    expect(isStorageMutationMessage({
+      ...envelope, operation: 'importBackup', payload: { format: 'poop-translator-backup', version: 2, data: {} },
+    })).toBe(true);
+  });
+
+  it('reports a rated card only after the storage coordinator succeeds', async () => {
+    const client = new StorageClient(async (message) => ({ ok: true, data: {
+      dictionaryId: (message as { payload: { id: string } }).payload.id,
+      streak: 1, dueAt: 86_401_000, lastReviewedAt: 1_000,
+    } }));
+    await expect(client.rateReview('cat', 'good')).resolves.toMatchObject({
+      dictionaryId: 'cat', streak: 1,
+    });
   });
 });

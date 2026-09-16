@@ -6,6 +6,8 @@ import type {
   BackupImportResult,
   ExtensionState,
   HistoryInput,
+  ReviewProgress,
+  ReviewRating,
   Settings,
 } from '../shared/types';
 
@@ -19,6 +21,7 @@ export type StorageMutationOperation =
   | 'removeDictionaryEntry'
   | 'clearDictionary'
   | 'clearUserData'
+  | 'rateReview'
   | 'importBackup';
 
 export interface StorageMutationMessage {
@@ -39,7 +42,7 @@ type ReadState = () => Promise<ExtensionState>;
 
 const operations = new Set<StorageMutationOperation>([
   'updateSettings', 'addHistory', 'removeHistoryEntry', 'clearHistory', 'addDictionaryEntry',
-  'updateDictionaryEntry', 'removeDictionaryEntry', 'clearDictionary', 'clearUserData', 'importBackup',
+  'updateDictionaryEntry', 'removeDictionaryEntry', 'clearDictionary', 'clearUserData', 'rateReview', 'importBackup',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -85,13 +88,16 @@ function hasValidPayload(operation: StorageMutationOperation, payload: unknown):
     case 'addDictionaryEntry': return isDictionaryInput(payload);
     case 'updateDictionaryEntry':
       return isRecord(payload) && isString(payload.id, 200) && isDictionaryInput(payload.input);
+    case 'rateReview':
+      return isRecord(payload) && isString(payload.id, 200)
+        && (payload.rating === 'again' || payload.rating === 'hard' || payload.rating === 'good');
     case 'removeHistoryEntry':
     case 'removeDictionaryEntry':
       return isString(payload, 200);
     case 'importBackup':
       return isRecord(payload)
         && payload.format === 'poop-translator-backup'
-        && payload.version === 1
+        && (payload.version === 1 || payload.version === 2)
         && isRecord(payload.data);
     case 'clearHistory':
     case 'clearDictionary':
@@ -169,6 +175,10 @@ export class StorageClient {
 
   clearUserData(): Promise<void> {
     return this.mutate('clearUserData');
+  }
+
+  rateReview(id: string, rating: ReviewRating): Promise<ReviewProgress> {
+    return this.mutate('rateReview', { id, rating });
   }
 
   importBackup(value: unknown): Promise<BackupImportResult> {

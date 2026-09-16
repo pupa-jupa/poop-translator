@@ -10,7 +10,7 @@ import {
   type RegionCaptureRequest,
   type RuntimeResponse,
 } from './shared/messages';
-import type { DictionaryInput, HistoryInput, OcrRecognitionResult, Settings } from './shared/types';
+import type { DictionaryInput, HistoryInput, OcrRecognitionResult, ReviewRating, Settings } from './shared/types';
 
 const MENU_RU_ID = 'poop-translator-selection-ru';
 const MENU_EN_ID = 'poop-translator-selection-en';
@@ -152,6 +152,10 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
         return repository.clearDictionary();
       case 'clearUserData':
         return repository.clearUserData();
+      case 'rateReview': {
+        const payload = message.payload as { id: string; rating: ReviewRating };
+        return repository.rateReview(payload.id, payload.rating);
+      }
       case 'importBackup':
         return repository.importBackup(message.payload);
     }
