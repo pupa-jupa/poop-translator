@@ -3,6 +3,12 @@ import { resolve } from 'node:path';
 
 const output = resolve('dist');
 const manifest = JSON.parse(await readFile(resolve(output, 'manifest.json'), 'utf8'));
+const sourceManifest = JSON.parse(await readFile(resolve('public/manifest.json'), 'utf8'));
+const packageMetadata = JSON.parse(await readFile(resolve('package.json'), 'utf8'));
+
+if (manifest.version !== sourceManifest.version || manifest.version !== packageMetadata.version) {
+  throw new Error(`Extension version mismatch: dist=${manifest.version}, source=${sourceManifest.version}, package=${packageMetadata.version}`);
+}
 
 if (manifest.manifest_version !== 3) throw new Error('manifest_version must be 3');
 if (manifest.minimum_chrome_version !== '138') throw new Error('minimum_chrome_version must be 138');

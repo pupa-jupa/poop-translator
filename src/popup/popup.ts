@@ -1,5 +1,6 @@
 import './popup.css';
 import { lookupAlternativeVariants } from '../core/dictionary-client';
+import { dueCards } from '../core/review';
 import { createBackup, STORAGE_KEY } from '../core/storage';
 import { getStorageClient } from '../core/storage-client';
 import { persistTranslationHistory } from '../core/translation-history';
@@ -25,6 +26,9 @@ let toastTimer = 0;
 let translationBusy = false;
 let translationOperation = 0;
 let engineStatusOperation = 0;
+let revealedReviewId: string | undefined;
+let reviewBusy = false;
+let stateRefreshVersion = 0;
 
 const sourceText = required<HTMLTextAreaElement>('#source-text');
 const charCount = required<HTMLElement>('[data-char-count]');
@@ -48,6 +52,9 @@ const enginePill = required<HTMLElement>('[data-engine-status]');
 const engineDetail = required<HTMLElement>('[data-engine-detail]');
 const historyList = required<HTMLElement>('[data-history-list]');
 const dictionaryList = required<HTMLElement>('[data-dictionary-list]');
+const reviewList = required<HTMLElement>('[data-review-list]');
+const reviewDue = required<HTMLElement>('[data-review-due]');
+const reviewHeading = required<HTMLElement>('#panel-review h2');
 const historySearch = required<HTMLInputElement>('[data-search="history"]');
 const dictionarySearch = required<HTMLInputElement>('[data-search="dictionary"]');
 const pageStatusLabel = required<HTMLElement>('[data-page-status]');
@@ -205,11 +212,146 @@ function renderDictionary(): void {
   }
 }
 
+function renderReview(): void {
+  const due = dueCards(state, Date.now());
+  const dueText = `${due.length} сейчас`;
+  const entry = due[0];
+  const current = reviewList.querySelector<HTMLElement>('[data-review-card]');
+  if (entry && current?.dataset.reviewCard === entry.id && reviewDue.textContent === dueText
+    && current.querySelector('.review-question')?.textContent === entry.original
+    && current.querySelector('.review-answer p')?.textContent === entry.translation
+    && current.querySelector<HTMLElement>('.review-answer')?.hidden === (revealedReviewId !== entry.id)) {
+    return;
+  }
+  reviewDue.textContent = dueText;
+  reviewList.replaceChildren();
+  if (!entry) {
+    revealedReviewId = undefined;
+    if (!state.dictionary.length) {
+      reviewList.append(emptyState('♡', 'Слов пока нет', 'Добавьте первую пару в словарь, чтобы начать повторение.'));
+      const add = miniButton('Открыть словарь', () => {
+        activateTab(root, 'dictionary');
+        required<HTMLButtonElement>('[data-action="add-word"]').focus();
+      });
+      add.className = 'button button--accent review-empty-action';
+      reviewList.append(add);
+    } else {
+      const next = Math.min(...state.review.map((item) => item.dueAt));
+      reviewList.append(emptyState('✿', 'Все карточки пройдены',
+        Number.isFinite(next) ? `Следующее повторение: ${formattedDate(next)}.` : 'Загляните позже.'));
+    }
+    return;
+  }
+
+  const card = document.createElement('article');
+  card.className = 'review-card';
+  card.dataset.reviewCard = entry.id;
+  const kicker = document.createElement('span');
+  kicker.className = 'section-kicker';
+  kicker.textContent = 'Как это переводится?';
+  const question = document.createElement('p');
+  question.className = 'review-question';
+  question.textContent = entry.original;
+  const reveal = document.createElement('button');
+  reveal.type = 'button';
+  reveal.className = 'button button--accent review-reveal';
+  reveal.dataset.reviewReveal = '';
+  reveal.textContent = 'Показать перевод';
+  const answer = document.createElement('div');
+  answer.className = 'review-answer';
+  answer.hidden = revealedReviewId !== entry.id;
+  const answerLabel = document.createElement('span');
+  answerLabel.className = 'section-kicker';
+  answerLabel.textContent = 'Ответ';
+  const translation = document.createElement('p');
+  translation.textContent = entry.translation;
+  answer.append(answerLabel, translation);
+  const actions = document.createElement('div');
+  actions.className = 'review-actions';
+  actions.hidden = answer.hidden;
+  const ratings = [
+    ['again', 'Повторить', 'через 10 минут'],
+    ['hard', 'Сложно', 'завтра'],
+    ['good', 'Знаю', 'дольше'],
+  ] as const;
+  for (const [rating, label, hint] of ratings) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'review-rating';
+    button.dataset.reviewRating = rating;
+    const title = document.createElement('strong');
+    title.textContent = label;
+    const detail = document.createElement('small');
+    detail.textContent = hint;
+    button.append(title, detail);
+    button.disabled = reviewBusy;
+    button.addEventListener('click', () => {
+      if (reviewBusy) return;
+      reviewBusy = true;
+      stateRefreshVersion += 1;
+      actions.querySelectorAll<HTMLButtonElement>('button').forEach((item) => { item.disabled = true; });
+      void (async () => {
+        let progress;
+        try {
+          progress = await repository.rateReview(entry.id, rating);
+        } catch (error) {
+          reviewBusy = false;
+          stateRefreshVersion += 1;
+          renderReview();
+          reviewList.querySelectorAll<HTMLButtonElement>('[data-review-rating]')
+            .forEach((item) => { item.disabled = false; });
+          const retry = reviewList.querySelector<HTMLButtonElement>(`[data-review-rating="${rating}"]`);
+          if (retry) retry.focus();
+          else {
+            reviewHeading.tabIndex = -1;
+            reviewHeading.focus();
+          }
+          showToast(error instanceof Error ? error.message : 'Не удалось сохранить повторение');
+          void refreshState().catch(() => undefined);
+          return;
+        }
+        revealedReviewId = undefined;
+        reviewBusy = false;
+        stateRefreshVersion += 1;
+        state.review = [...state.review.filter((item) => item.dictionaryId !== entry.id), progress];
+        try {
+          renderReview();
+          showToast(`Повторим: ${formattedDate(progress.dueAt)}`);
+          const next = reviewList.querySelector<HTMLButtonElement>('[data-review-reveal]');
+          if (next) next.focus();
+          else {
+            reviewHeading.tabIndex = -1;
+            reviewHeading.focus();
+          }
+          void refreshState().catch(() => undefined);
+        } catch {
+          showToast('Повторение сохранено. Откройте карточки снова.');
+        }
+      })();
+    });
+    actions.append(button);
+  }
+  reveal.hidden = !answer.hidden;
+  reveal.addEventListener('click', () => {
+    revealedReviewId = entry.id;
+    reveal.hidden = true;
+    answer.hidden = false;
+    actions.hidden = false;
+    actions.querySelector<HTMLButtonElement>('button')?.focus();
+  });
+  card.append(kicker, question, reveal, answer, actions);
+  reviewList.append(card);
+}
+
 async function refreshState(): Promise<void> {
-  state = await repository.loadState();
+  const version = ++stateRefreshVersion;
+  const loaded = await repository.loadState();
+  if (version !== stateRefreshVersion || reviewBusy) return;
+  state = loaded;
   syncSettingsControls();
   renderHistory();
   renderDictionary();
+  if (!reviewBusy) renderReview();
 }
 
 async function updateSourceMode(mode: SourceMode): Promise<void> {
@@ -610,7 +752,9 @@ chrome.runtime.onMessage.addListener((message: unknown) => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && changes[STORAGE_KEY]) void refreshState();
+  if (areaName === 'local' && changes[STORAGE_KEY]) {
+    void refreshState().catch(() => undefined);
+  }
 });
 
 void (async () => {

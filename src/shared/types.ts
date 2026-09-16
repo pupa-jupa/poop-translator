@@ -69,16 +69,26 @@ export interface DictionaryInput {
   note?: string;
 }
 
+export type ReviewRating = 'again' | 'hard' | 'good';
+
+export interface ReviewProgress {
+  dictionaryId: string;
+  dueAt: number;
+  lastReviewedAt: number;
+  streak: number;
+}
+
 export interface ExtensionState {
-  schemaVersion: 1;
+  schemaVersion: 2;
   settings: Settings;
   history: HistoryEntry[];
   dictionary: DictionaryEntry[];
+  review: ReviewProgress[];
 }
 
 export interface ExtensionBackup {
   format: 'poop-translator-backup';
-  version: 1;
+  version: 2;
   exportedAt: string;
   data: ExtensionState;
 }

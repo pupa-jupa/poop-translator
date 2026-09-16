@@ -27,6 +27,127 @@ function historyInput(requestId: string) {
 }
 
 describe('StorageRepository', () => {
+  it('migrates existing v1 history and dictionary into review cards without changing entries', async () => {
+    const storage = new MemoryStorage();
+    storage.data[STORAGE_KEY] = {
+      schemaVersion: 1, settings: { ...DEFAULT_STATE.settings },
+      history: [{ id: 'h', ...historyInput('r'), createdAt: 42 }],
+      dictionary: [{ id: 'd', original: 'cat', translation: 'кот', note: '', createdAt: 4, updatedAt: 5 }],
+    };
+    const state = await new StorageRepository(storage).loadState();
+    expect(state.schemaVersion).toBe(2);
+    expect(state.history[0]?.requestId).toBe('r');
+    expect(state.dictionary[0]?.id).toBe('d');
+    expect(state.review).toEqual([]);
+  });
+
+  it('rates only dictionary entries, saves progress and discards it on deletion', async () => {
+    const storage = new MemoryStorage();
+    const repository = new StorageRepository(storage);
+    const { entry } = await repository.addDictionaryEntry({ original: 'cat', translation: 'кот' });
+    await expect(repository.rateReview('unknown', 'good', 1_000)).rejects.toThrow('Запись не найдена');
+    expect(await repository.rateReview(entry.id, 'good', 1_000)).toMatchObject({
+      dictionaryId: entry.id, dueAt: 86_401_000, streak: 1,
+    });
+    await repository.removeDictionaryEntry(entry.id);
+    expect((await repository.loadState()).review).toEqual([]);
+  });
+
+  it('makes an edited dictionary pair new again but retains progress for a note edit', async () => {
+    const repository = new StorageRepository(new MemoryStorage());
+    const { entry } = await repository.addDictionaryEntry({ original: 'cat', translation: 'кот' });
+    await repository.rateReview(entry.id, 'good', 1_000);
+    await repository.updateDictionaryEntry(entry.id, { original: 'cat', translation: 'кот', note: 'животное' });
+    expect((await repository.loadState()).review).toHaveLength(1);
+    await repository.updateDictionaryEntry(entry.id, { original: 'dog', translation: 'собака', note: '' });
+    expect((await repository.loadState()).review).toEqual([]);
+  });
+
+  it('does not claim a card was rated when writing fails', async () => {
+    class FailingStorage extends MemoryStorage {
+      failNext = false;
+      override async set(items: Record<string, unknown>): Promise<void> {
+        if (this.failNext) { this.failNext = false; throw new Error('Квота исчерпана'); }
+        await super.set(items);
+      }
+    }
+    const storage = new FailingStorage();
+    const repository = new StorageRepository(storage);
+    const { entry } = await repository.addDictionaryEntry({ original: 'cat', translation: 'кот' });
+    storage.failNext = true;
+    await expect(repository.rateReview(entry.id, 'good', 1_000)).rejects.toThrow('Квота исчерпана');
+    expect((await repository.loadState()).review).toEqual([]);
+    await repository.rateReview(entry.id, 'good', 1_000);
+    expect((await repository.loadState()).review).toHaveLength(1);
+  });
+
+  it('serializes competing ratings of the same due card as one review', async () => {
+    const repository = new StorageRepository(new MemoryStorage());
+    const { entry } = await repository.addDictionaryEntry({ original: 'cat', translation: 'кот' });
+    const results = await Promise.allSettled([
+      repository.rateReview(entry.id, 'good', 1_000),
+      repository.rateReview(entry.id, 'good', 1_000),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect((await repository.loadState()).review[0]?.streak).toBe(1);
+  });
+
+  it('rejects orphaned or malformed review progress on loading', async () => {
+    const storage = new MemoryStorage();
+    storage.data[STORAGE_KEY] = { ...DEFAULT_STATE,
+      dictionary: [{ id: 'cat', original: 'cat', translation: 'кот', note: '', createdAt: 1, updatedAt: 1 }],
+      review: [
+        { dictionaryId: 'cat', dueAt: 100, lastReviewedAt: 10, streak: 2 },
+        { dictionaryId: 'absent', dueAt: 100, lastReviewedAt: 10, streak: 2 },
+        { dictionaryId: 'cat', dueAt: Infinity, lastReviewedAt: 10, streak: 2 },
+        { dictionaryId: 'cat', dueAt: 1e308, lastReviewedAt: 20, streak: 2 },
+      ],
+    };
+    expect((await new StorageRepository(storage).loadState()).review).toEqual([
+      { dictionaryId: 'cat', dueAt: 100, lastReviewedAt: 10, streak: 2 },
+    ]);
+  });
+
+  it('imports a v1 backup and maps v2 review by pair without overwriting newer progress', async () => {
+    const storage = new MemoryStorage();
+    const repository = new StorageRepository(storage);
+    const { entry } = await repository.addDictionaryEntry({ original: 'cat', translation: 'кот' });
+    await repository.rateReview(entry.id, 'good', 2_000);
+    const importedEntry = { ...entry, id: 'backup-cat', original: ' CAT ' };
+    const dog = { ...entry, id: 'backup-dog', original: 'dog', translation: 'собака' };
+    const v1 = { format: 'poop-translator-backup', version: 1,
+      data: { schemaVersion: 1, settings: DEFAULT_STATE.settings, history: [], dictionary: [dog] } };
+    await repository.importBackup(v1);
+    const v2 = { format: 'poop-translator-backup', version: 2,
+      data: { schemaVersion: 2, settings: DEFAULT_STATE.settings, history: [],
+        dictionary: [importedEntry, dog], review: [
+          { dictionaryId: 'backup-cat', dueAt: 300, lastReviewedAt: 1_000, streak: 3 },
+          { dictionaryId: 'backup-dog', dueAt: 900, lastReviewedAt: 3_000, streak: 2 },
+        ] } };
+    await repository.importBackup(v2);
+    const state = await repository.loadState();
+    expect(state.dictionary).toHaveLength(2);
+    expect(state.review.find((item) => item.dictionaryId === entry.id)?.lastReviewedAt).toBe(2_000);
+    expect(state.review.find((item) => item.dictionaryId === 'backup-dog')?.dueAt).toBe(900);
+    expect(createBackup(state).version).toBe(2);
+  });
+
+  it('remaps imported dictionary IDs that conflict with a different local pair', async () => {
+    const storage = new MemoryStorage();
+    const repository = new StorageRepository(storage);
+    const { entry } = await repository.addDictionaryEntry({ original: 'cat', translation: 'кот' });
+    const backup = { format: 'poop-translator-backup', version: 2, data: {
+      ...DEFAULT_STATE,
+      dictionary: [{ ...entry, original: 'dog', translation: 'собака' }],
+      review: [{ dictionaryId: entry.id, dueAt: 900, lastReviewedAt: 100, streak: 1 }],
+    } };
+    await repository.importBackup(backup);
+    const state = await repository.loadState();
+    const dog = state.dictionary.find((item) => item.original === 'dog');
+    expect(dog?.id).not.toBe(entry.id);
+    expect(state.review.find((item) => item.dictionaryId === dog?.id)?.dueAt).toBe(900);
+  });
   it('repairs malformed persisted values without losing valid settings', async () => {
     const storage = new MemoryStorage();
     storage.data[STORAGE_KEY] = {

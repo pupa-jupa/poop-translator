@@ -5,17 +5,20 @@ import type {
   ExtensionState,
   HistoryEntry,
   HistoryInput,
+  ReviewProgress,
+  ReviewRating,
   Settings,
   StorageAreaLike,
   TextScale,
 } from '../shared/types';
+import { scheduleReview } from './review';
 
 export const STORAGE_KEY = 'poopTranslatorState';
 const HISTORY_LIMIT = 500;
 const DEFAULT_TEXT_SCALE: TextScale = 115;
 
 export const DEFAULT_STATE: ExtensionState = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   settings: {
     sourceMode: 'en',
     saveHistory: true,
@@ -24,6 +27,7 @@ export const DEFAULT_STATE: ExtensionState = {
   },
   history: [],
   dictionary: [],
+  review: [],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,6 +36,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function validTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+    && Number.isFinite(new Date(value).getTime());
 }
 
 function normalizedSettings(value: unknown): Settings {
@@ -78,13 +87,37 @@ function normalizedDictionary(value: unknown): DictionaryEntry[] {
   });
 }
 
+function normalizedReview(value: unknown, dictionary: DictionaryEntry[]): ReviewProgress[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set(dictionary.map((entry) => entry.id));
+  const valid = new Map<string, ReviewProgress>();
+  for (const item of value) {
+    if (!isRecord(item) || !nonEmptyString(item.dictionaryId) || !ids.has(item.dictionaryId)
+      || !validTimestamp(item.dueAt)
+      || !validTimestamp(item.lastReviewedAt)
+      || typeof item.streak !== 'number' || !Number.isInteger(item.streak)
+      || item.streak < 0 || item.streak > 10_000) continue;
+    const candidate: ReviewProgress = {
+      dictionaryId: item.dictionaryId,
+      dueAt: item.dueAt,
+      lastReviewedAt: item.lastReviewedAt,
+      streak: item.streak,
+    };
+    const old = valid.get(candidate.dictionaryId);
+    if (!old || old.lastReviewedAt < candidate.lastReviewedAt) valid.set(candidate.dictionaryId, candidate);
+  }
+  return [...valid.values()];
+}
+
 export function normalizeState(value: unknown): ExtensionState {
   const record = isRecord(value) ? value : {};
+  const dictionary = normalizedDictionary(record.dictionary);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     settings: normalizedSettings(record.settings),
     history: normalizedHistory(record.history),
-    dictionary: normalizedDictionary(record.dictionary),
+    dictionary,
+    review: record.schemaVersion === 2 ? normalizedReview(record.review, dictionary) : [],
   };
 }
 
@@ -94,7 +127,7 @@ export function createBackup(
 ): ExtensionBackup {
   return {
     format: 'poop-translator-backup',
-    version: 1,
+    version: 2,
     exportedAt: exportedAt.toISOString(),
     data: normalizeState(state),
   };
@@ -103,8 +136,9 @@ export function createBackup(
 function parseBackup(value: unknown): ExtensionState {
   if (!isRecord(value)
     || value.format !== 'poop-translator-backup'
-    || value.version !== 1
-    || !isRecord(value.data)) {
+    || (value.version !== 1 && value.version !== 2)
+    || !isRecord(value.data)
+    || value.data.schemaVersion !== value.version) {
     throw new Error('Файл не похож на резервную копию poop translator');
   }
   return normalizeState(value.data);
@@ -227,6 +261,9 @@ export class StorageRepository {
         updatedAt: Date.now(),
       };
       state.dictionary[index] = entry;
+      if (dictionaryKey(previous.original, previous.translation) !== key) {
+        state.review = state.review.filter((item) => item.dictionaryId !== id);
+      }
       return entry;
     });
   }
@@ -234,21 +271,38 @@ export class StorageRepository {
   async removeDictionaryEntry(id: string): Promise<void> {
     await this.mutate((state) => {
       state.dictionary = state.dictionary.filter((entry) => entry.id !== id);
+      state.review = state.review.filter((item) => item.dictionaryId !== id);
     });
   }
 
   async clearDictionary(): Promise<void> {
     await this.mutate((state) => {
       state.dictionary = [];
+      state.review = [];
     });
   }
 
   async clearUserData(): Promise<void> {
     await this.mutate((state) => {
-      state.schemaVersion = 1;
+      state.schemaVersion = 2;
       state.settings = { ...DEFAULT_STATE.settings };
       state.history = [];
       state.dictionary = [];
+      state.review = [];
+    });
+  }
+
+  async rateReview(id: string, rating: ReviewRating, now = Date.now()): Promise<ReviewProgress> {
+    if (rating !== 'again' && rating !== 'hard' && rating !== 'good') {
+      throw new Error('Некорректная оценка повторения');
+    }
+    return this.mutate((state) => {
+      if (!state.dictionary.some((entry) => entry.id === id)) throw new Error('Запись не найдена');
+      const old = state.review.find((item) => item.dictionaryId === id);
+      if (old && old.dueAt > now) throw new Error('Карточка уже повторена. Обновите список.');
+      const next = scheduleReview(id, old, rating, now);
+      state.review = [...state.review.filter((item) => item.dictionaryId !== id), next];
+      return next;
     });
   }
 
@@ -261,13 +315,32 @@ export class StorageRepository {
         historyIds.add(entry.requestId);
         return true;
       });
-      const dictionaryKeys = new Set(state.dictionary.map((entry) => dictionaryKey(entry.original, entry.translation)));
-      const importedDictionary = imported.dictionary.filter((entry) => {
+      const byKey = new Map(state.dictionary.map((entry) => [dictionaryKey(entry.original, entry.translation), entry]));
+      const usedIds = new Set(state.dictionary.map((entry) => entry.id));
+      const remapped = new Map<string, string>();
+      const importedDictionary: DictionaryEntry[] = [];
+      for (const entry of imported.dictionary) {
         const key = dictionaryKey(entry.original, entry.translation);
-        if (dictionaryKeys.has(key)) return false;
-        dictionaryKeys.add(key);
-        return true;
-      });
+        const existing = byKey.get(key);
+        if (existing) { remapped.set(entry.id, existing.id); continue; }
+        let id = entry.id;
+        while (usedIds.has(id)) id = makeId();
+        const added = { ...entry, id };
+        importedDictionary.push(added);
+        usedIds.add(id);
+        byKey.set(key, added);
+        remapped.set(entry.id, id);
+      }
+
+      const progress = new Map(state.review.map((item) => [item.dictionaryId, item]));
+      for (const item of imported.review) {
+        const id = remapped.get(item.dictionaryId);
+        if (!id) continue;
+        const existing = progress.get(id);
+        if (!existing || existing.lastReviewedAt < item.lastReviewedAt) {
+          progress.set(id, { ...item, dictionaryId: id });
+        }
+      }
 
       state.settings = imported.settings;
       state.history = [...importedHistory, ...state.history]
@@ -275,6 +348,7 @@ export class StorageRepository {
         .slice(0, HISTORY_LIMIT);
       state.dictionary = [...importedDictionary, ...state.dictionary]
         .sort((left, right) => right.updatedAt - left.updatedAt);
+      state.review = [...progress.values()];
       return { historyAdded: importedHistory.length, dictionaryAdded: importedDictionary.length };
     });
   }

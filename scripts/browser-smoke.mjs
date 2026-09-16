@@ -79,8 +79,20 @@ try {
   await popup.locator('.brand-copy h1').waitFor();
 
   const tabNames = await popup.locator('[role="tab"]').allTextContents();
-  if (tabNames.join('|') !== 'Перевод|История|Словарь|Настройки') {
+  if (tabNames.join('|') !== 'Перевод|История|Словарь|Карточки|Настройки') {
     throw new Error(`Unexpected popup tabs: ${tabNames.join(', ')}`);
+  }
+  await popup.locator('[data-tab="translate"]').focus();
+  await popup.keyboard.press('ArrowRight');
+  if (!await popup.locator('[data-tab="history"]').evaluate((tab) => document.activeElement === tab
+    && tab.getAttribute('aria-selected') === 'true')) throw new Error('Tab arrow navigation lost focus');
+  await popup.keyboard.press('End');
+  if (await popup.locator('[data-tab="settings"]').getAttribute('aria-selected') !== 'true') {
+    throw new Error('End did not select the last popup tab');
+  }
+  await popup.keyboard.press('Home');
+  if (await popup.locator('[data-tab="translate"]').getAttribute('aria-selected') !== 'true') {
+    throw new Error('Home did not return to translation tab');
   }
   const directionValues = await popup.locator('[data-control="source-mode"] option').evaluateAll(
     (options) => options.map((option) => option.value),
@@ -154,8 +166,137 @@ try {
     }));
     throw new Error(`Dictionary RPC failed: ${JSON.stringify(diagnostics)}; worker=${worker.url()}; workerConsole=${workerMessages.join(' | ')}; console=${errors.join(' | ')}`);
   }
+  const storedWordId = await popup.evaluate(async (word) => {
+    const stored = await chrome.storage.local.get('poopTranslatorState');
+    return stored.poopTranslatorState.dictionary.find((entry) => entry.original === word)?.id;
+  }, smokeWord);
+  if (!storedWordId) throw new Error('Review fixture is missing its dictionary ID');
+  const nextWord = `next-${Date.now()}`;
+  await popup.locator('[data-action="add-word"]').click();
+  await popup.locator('[data-word-original]').fill(nextWord);
+  await popup.locator('[data-word-translation]').fill('следующий');
+  await popup.locator('[data-word-save]').click();
+  const nextStoredCard = popup.locator('.item-card', { hasText: nextWord });
+  await nextStoredCard.waitFor();
+  await popup.locator('[data-tab="review"]').click();
+  await popup.locator('[data-review-card]').filter({ hasText: smokeWord }).waitFor();
+  await popup.locator('[data-review-reveal]').click();
+  await popup.locator('[data-review-card]').filter({ hasText: 'проверка' }).waitFor();
+  if (process.env.POOP_TRANSLATOR_REVIEW_SCREENSHOT_PATH) {
+    const reviewScreenshotPath = resolve(process.env.POOP_TRANSLATOR_REVIEW_SCREENSHOT_PATH);
+    await mkdir(dirname(reviewScreenshotPath), { recursive: true });
+    await popup.screenshot({ path: reviewScreenshotPath });
+  }
+  await popup.evaluate(() => {
+    const originalSend = chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.runtime.sendMessage = async (message, ...args) => {
+      if (message?.operation === 'rateReview') {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+        return { ok: false, error: 'Квота исчерпана' };
+      }
+      return originalSend(message, ...args);
+    };
+    globalThis.__restoreReviewSend = () => { chrome.runtime.sendMessage = originalSend; };
+  });
+  await popup.locator('[data-review-rating="hard"]').click();
+  await popup.evaluate(async () => {
+    const stored = await chrome.storage.local.get('poopTranslatorState');
+    const current = stored.poopTranslatorState;
+    await chrome.storage.local.set({ poopTranslatorState: {
+      ...current, settings: { ...current.settings, saveHistory: !current.settings.saveHistory },
+    } });
+  });
+  await popup.locator('[data-toast]').getByText('Квота исчерпана').waitFor();
+  if (await popup.locator('[data-review-rating="good"]').isDisabled()
+    || !await popup.locator('[data-review-card]').filter({ hasText: 'проверка' }).isVisible()) {
+    throw new Error('Failed review left the visible answer or ratings unavailable');
+  }
+  await popup.evaluate(() => globalThis.__restoreReviewSend());
+  await popup.evaluate(() => {
+    const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+    chrome.storage.local.get = async (...args) => {
+      if (args[0] === 'poopTranslatorState') throw new Error('Чтение временно недоступно');
+      return originalGet(...args);
+    };
+    globalThis.__restoreReviewRead = () => { chrome.storage.local.get = originalGet; };
+  });
+  await popup.locator('[data-review-rating="good"]').click();
+  await popup.locator('[data-review-card]').filter({ hasText: smokeWord }).waitFor({ state: 'detached' });
+  await popup.evaluate(() => globalThis.__restoreReviewRead());
+  await popup.locator('[data-review-card]').filter({ hasText: nextWord }).waitFor();
+  await popup.evaluate(async () => {
+    const stored = await chrome.storage.local.get('poopTranslatorState');
+    const current = stored.poopTranslatorState;
+    await chrome.storage.local.set({ poopTranslatorState: {
+      ...current, settings: { ...current.settings, saveHistory: !current.settings.saveHistory },
+    } });
+  });
+  await popup.waitForFunction(() => document.querySelector('[data-control="save-history"]').checked);
+  const nextRevealFocused = await popup.locator('[data-review-reveal]').evaluate(
+    (button) => document.activeElement === button,
+  );
+  if (!nextRevealFocused) throw new Error('Storage refresh removed focus from the next review card');
+  await popup.locator('[data-review-reveal]').click();
+  await popup.evaluate(async () => {
+    const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+    const current = (await originalGet('poopTranslatorState')).poopTranslatorState;
+    let releaseRead;
+    let markStarted;
+    globalThis.__staleReviewReadStarted = new Promise((resolveStarted) => { markStarted = resolveStarted; });
+    globalThis.__releaseStaleReviewRead = () => releaseRead();
+    globalThis.__restoreStaleReviewRead = () => { chrome.storage.local.get = originalGet; };
+    let intercepted = false;
+    chrome.storage.local.get = async (...args) => {
+      if (!intercepted && args[0] === 'poopTranslatorState') {
+        intercepted = true;
+        const oldSnapshot = await originalGet(...args);
+        markStarted();
+        await new Promise((resolveRead) => { releaseRead = resolveRead; });
+        setTimeout(() => { globalThis.__staleReviewReadDelivered = true; }, 0);
+        return oldSnapshot;
+      }
+      return originalGet(...args);
+    };
+    await chrome.storage.local.set({ poopTranslatorState: {
+      ...current, settings: { ...current.settings, saveHistory: !current.settings.saveHistory },
+    } });
+  });
+  await popup.evaluate(() => globalThis.__staleReviewReadStarted);
+  await popup.locator('[data-review-rating="good"]').click();
+  await popup.locator('[data-review-card]').filter({ hasText: nextWord }).waitFor({ state: 'detached' });
+  await popup.evaluate(() => globalThis.__releaseStaleReviewRead());
+  await popup.waitForFunction(() => globalThis.__staleReviewReadDelivered === true);
+  await popup.evaluate(() => globalThis.__restoreStaleReviewRead());
+  if (await popup.locator('[data-review-card]').filter({ hasText: nextWord }).count()) {
+    throw new Error('A stale storage read resurrected an already reviewed card');
+  }
+  const focusedAfterReview = await popup.evaluate(() => ({
+    tag: document.activeElement?.tagName,
+    insidePanel: document.querySelector('[data-view="review"]')?.contains(document.activeElement),
+  }));
+  if (!focusedAfterReview.insidePanel || focusedAfterReview.tag === 'BODY') {
+    throw new Error(`Review focus was lost after the last card: ${JSON.stringify(focusedAfterReview)}`);
+  }
+  const reviewed = await popup.evaluate(async (id) => {
+    const stored = await chrome.storage.local.get('poopTranslatorState');
+    return stored.poopTranslatorState.review.find((item) => item.dictionaryId === id);
+  }, storedWordId);
+  if (!reviewed || reviewed.streak !== 1 || reviewed.dueAt - reviewed.lastReviewedAt !== 86_400_000) {
+    throw new Error(`Review was not saved for tomorrow: ${JSON.stringify(reviewed)}`);
+  }
+  await popup.reload();
+  await popup.locator('[data-tab="review"]').click();
+  if (await popup.locator('[data-review-card]').filter({ hasText: smokeWord }).count()) {
+    throw new Error('Reviewed card reappeared after reopening popup');
+  }
+  if (await popup.locator('[data-review-card]').filter({ hasText: nextWord }).count()) {
+    throw new Error('Second reviewed card reappeared after reopening popup');
+  }
+  await popup.locator('[data-tab="dictionary"]').click();
   await storedCard.getByRole('button', { name: 'Удалить' }).click();
   await storedCard.waitFor({ state: 'detached' });
+  await nextStoredCard.getByRole('button', { name: 'Удалить' }).click();
+  await nextStoredCard.waitFor({ state: 'detached' });
   await popup.locator('[data-tab="settings"]').click();
   if (!await popup.locator('[data-view="settings"]').isVisible()) throw new Error('Settings tab did not open');
   await popup.locator('[data-control="text-scale"]').selectOption('130');

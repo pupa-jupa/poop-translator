@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { activateTab, mountPopupShell } from '../src/popup/ui';
 
 describe('popup shell', () => {
-  it('renders four Russian navigation tabs with translation active', () => {
+  it('renders five Russian navigation tabs with translation active', () => {
     const root = document.createElement('div');
     mountPopupShell(root);
 
     const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
     expect(tabs.map((tab) => tab.textContent?.trim())).toEqual([
-      'Перевод', 'История', 'Словарь', 'Настройки',
+      'Перевод', 'История', 'Словарь', 'Карточки', 'Настройки',
     ]);
     expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');
     expect(root.querySelector<HTMLElement>('[data-view="translate"]')?.hidden).toBe(false);
@@ -25,6 +25,16 @@ describe('popup shell', () => {
     expect(root.querySelector('[data-tab="dictionary"]')?.getAttribute('aria-selected')).toBe('true');
     expect(root.querySelector<HTMLElement>('[data-view="translate"]')?.hidden).toBe(true);
     expect(root.querySelector<HTMLElement>('[data-view="dictionary"]')?.hidden).toBe(false);
+  });
+
+  it('provides a review panel with a named due count and card container', () => {
+    const root = document.createElement('div');
+    mountPopupShell(root);
+    activateTab(root, 'review');
+    expect(root.querySelector('[data-tab="review"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(root.querySelector<HTMLElement>('[data-view="review"]')?.hidden).toBe(false);
+    expect(root.querySelector('[data-review-due]')?.getAttribute('aria-live')).toBe('polite');
+    expect(root.querySelector('[data-review-list]')).not.toBeNull();
   });
 
   it('provides named controls for translation and destructive actions', () => {

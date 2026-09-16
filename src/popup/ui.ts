@@ -1,4 +1,4 @@
-export type PopupTab = 'translate' | 'history' | 'dictionary' | 'settings';
+export type PopupTab = 'translate' | 'history' | 'dictionary' | 'review' | 'settings';
 
 const brandIcon = `
   <svg viewBox="0 0 48 48" aria-hidden="true">
@@ -25,6 +25,7 @@ export function mountPopupShell(root: HTMLElement): void {
         <button id="tab-translate" role="tab" data-tab="translate" aria-controls="panel-translate" aria-selected="true" tabindex="0">Перевод</button>
         <button id="tab-history" role="tab" data-tab="history" aria-controls="panel-history" aria-selected="false" tabindex="-1">История</button>
         <button id="tab-dictionary" role="tab" data-tab="dictionary" aria-controls="panel-dictionary" aria-selected="false" tabindex="-1">Словарь</button>
+        <button id="tab-review" role="tab" data-tab="review" aria-controls="panel-review" aria-selected="false" tabindex="-1">Карточки</button>
         <button id="tab-settings" role="tab" data-tab="settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Настройки</button>
       </nav>
 
@@ -96,6 +97,12 @@ export function mountPopupShell(root: HTMLElement): void {
           <div class="item-list" data-dictionary-list></div>
         </section>
 
+        <section id="panel-review" class="view" data-view="review" role="tabpanel" aria-labelledby="tab-review" hidden>
+          <div class="section-head"><div><span class="section-kicker">Вспомнить с любовью</span><h2>Карточки</h2></div><span class="review-count" data-review-due aria-live="polite"></span></div>
+          <p class="review-intro">Сначала вспомните перевод, затем откройте ответ и выберите, когда повторить слово.</p>
+          <div data-review-list></div>
+        </section>
+
         <section id="panel-settings" class="view" data-view="settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
           <div class="section-head"><div><span class="section-kicker">Под себя</span><h2>Настройки</h2></div></div>
           <div class="settings-group">
@@ -117,7 +124,7 @@ export function mountPopupShell(root: HTMLElement): void {
 
           <div class="danger-zone">
             <span class="section-kicker">Данные на устройстве</span>
-            <button type="button" data-action="export-data"><span><strong>Экспорт данных</strong><small>Сохранить JSON с историей и словарём</small></span><span>↓</span></button>
+            <button type="button" data-action="export-data"><span><strong>Экспорт данных</strong><small>Сохранить JSON с историей, словарём и карточками</small></span><span>↓</span></button>
             <button type="button" data-action="import-data"><span><strong>Импорт данных</strong><small>Объединить с данными на устройстве</small></span><span>↑</span></button>
             <input type="file" accept="application/json,.json" data-import-file hidden>
             <button type="button" data-action="clear-history-settings"><span><strong>Очистить историю</strong><small>Словарь останется</small></span><span>›</span></button>
