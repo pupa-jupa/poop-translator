@@ -58,6 +58,7 @@ function isString(value: unknown, maxLength: number, allowEmpty = false): value 
 function isSettingsPatch(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return (value.sourceMode === undefined || value.sourceMode === 'en' || value.sourceMode === 'ru' || value.sourceMode === 'auto')
+    && (value.pageTargetLanguage === undefined || value.pageTargetLanguage === 'en' || value.pageTargetLanguage === 'ru')
     && (value.saveHistory === undefined || typeof value.saveHistory === 'boolean')
     && (value.showSelectionButton === undefined || typeof value.showSelectionButton === 'boolean')
     && (value.textScale === undefined || value.textScale === 100 || value.textScale === 115 || value.textScale === 130);

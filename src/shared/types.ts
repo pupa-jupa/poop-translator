@@ -1,4 +1,5 @@
 export type SourceMode = 'en' | 'ru' | 'auto';
+export type PageTargetLanguage = 'en' | 'ru';
 export type TextScale = 100 | 115 | 130;
 export type TranslationSource = 'manual' | 'selection' | 'context-menu' | 'ocr-region';
 export type OcrLanguage = 'eng' | 'rus';
@@ -36,6 +37,7 @@ export interface OcrRecognitionResult {
 
 export interface Settings {
   sourceMode: SourceMode;
+  pageTargetLanguage: PageTargetLanguage;
   saveHistory: boolean;
   showSelectionButton: boolean;
   textScale: TextScale;

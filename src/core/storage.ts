@@ -21,6 +21,7 @@ export const DEFAULT_STATE: ExtensionState = {
   schemaVersion: 2,
   settings: {
     sourceMode: 'en',
+    pageTargetLanguage: 'ru',
     saveHistory: true,
     showSelectionButton: true,
     textScale: DEFAULT_TEXT_SCALE,
@@ -47,6 +48,7 @@ function normalizedSettings(value: unknown): Settings {
   if (!isRecord(value)) return { ...DEFAULT_STATE.settings };
   return {
     sourceMode: value.sourceMode === 'auto' || value.sourceMode === 'ru' ? value.sourceMode : 'en',
+    pageTargetLanguage: value.pageTargetLanguage === 'en' ? 'en' : 'ru',
     saveHistory: typeof value.saveHistory === 'boolean'
       ? value.saveHistory
       : DEFAULT_STATE.settings.saveHistory,

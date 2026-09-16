@@ -21,7 +21,7 @@ describe('runtime message protocol', () => {
     expect(isContentRequest({
       type: 'TRANSLATE_PAGE',
       requestId: 'pt-123',
-      sourceMode: 'auto',
+      targetLanguage: 'ru',
     })).toBe(true);
     expect(isContentRequest({
       type: 'REGION_OCR_STARTED', requestId: 'pt-region',
@@ -30,7 +30,7 @@ describe('runtime message protocol', () => {
 
   it('accepts reverse translation and local dictionary lookup requests', () => {
     expect(isContentRequest({
-      type: 'TRANSLATE_PAGE', requestId: 'pt-123', sourceMode: 'ru',
+      type: 'TRANSLATE_PAGE', requestId: 'pt-123', targetLanguage: 'en',
     })).toBe(true);
     expect(isDictionaryLookupRequest({
       type: 'LOOKUP_DICTIONARY', requestId: 'pt-124', text: 'bank', sourceLanguage: 'en',
@@ -78,8 +78,9 @@ describe('runtime message protocol', () => {
   });
 
   it('rejects malformed or unknown runtime messages', () => {
-    expect(isContentRequest({ type: 'TRANSLATE_PAGE', sourceMode: 'auto' })).toBe(false);
-    expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', sourceMode: 'fr' })).toBe(false);
+    expect(isContentRequest({ type: 'TRANSLATE_PAGE', targetLanguage: 'ru' })).toBe(false);
+    expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', targetLanguage: 'fr' })).toBe(false);
+    expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', sourceMode: 'auto' })).toBe(false);
     expect(isContentRequest({ type: 'DELETE_EVERYTHING', requestId: 'pt-1' })).toBe(false);
     expect(isContentRequest({ type: 'SHOW_SELECTION_TRANSLATOR', requestId: 'pt-1', text: 'hello', source: 'context-menu' })).toBe(false);
     expect(isContentRequest(null)).toBe(false);

@@ -32,6 +32,15 @@ describe('page translation helpers', () => {
 });
 
 describe('PageTranslationSession', () => {
+  it('does not rewrite or snapshot text already on the target language', async () => {
+    document.body.innerHTML = '<main><p>  Уже по-русски   здесь.  </p></main>';
+    const node = document.querySelector('p')!.firstChild as Text;
+    const original = node.data;
+    const session = new PageTranslationSession();
+    await session.translate(document.querySelector('main')!, async (text) => text);
+    expect(node.data).toBe(original);
+    expect(session.translatedNodeCount).toBe(0);
+  });
   it('translates nodes, reports progress and restores untouched translations', async () => {
     document.body.innerHTML = '<main><p>Hello world.</p><p>Nice day.</p></main>';
     const main = document.querySelector('main')!;

@@ -80,6 +80,42 @@ describe('ChromeTranslator', () => {
     await preparation;
   });
 
+  it('prepares only the pair towards the page target, with detector in the click task', async () => {
+    const translatorApi = fakeTranslatorApi();
+    const detectorApi = {
+      availability: vi.fn(async () => 'available'),
+      create: vi.fn(async () => ({ detect: vi.fn(), destroy: vi.fn() })),
+    };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
+    const pending = engine.prepareForPageTarget('en');
+    expect(translatorApi.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      sourceLanguage: 'ru', targetLanguage: 'en',
+    }));
+    expect(detectorApi.create).toHaveBeenCalledOnce();
+    await pending;
+  });
+
+  it('does not wait for a downloading detector when the page translator is ready', async () => {
+    const translatorApi = fakeTranslatorApi();
+    const detectorApi = {
+      availability: vi.fn(async () => 'downloadable'),
+      create: vi.fn(() => new Promise<never>(() => undefined)),
+    };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi }, 1_000);
+    await expect(engine.prepareForPageTarget('ru')).resolves.toBeUndefined();
+    expect(detectorApi.create).toHaveBeenCalledOnce();
+    engine.destroy();
+  });
+
+  it('leaves text already on the page target unchanged without creating a reverse pair', async () => {
+    const api = fakeTranslatorApi({ translated: 'Hello' });
+    const engine = new ChromeTranslator({ Translator: api });
+    await engine.prepareForPageTarget('en');
+    expect(await engine.translatePageText('Hello there', 'en')).toBe('Hello there');
+    expect(await engine.translatePageText('Привет мир', 'en')).toBe('Hello');
+    expect(api.create).toHaveBeenCalledOnce();
+  });
+
   it('translates Russian to English with the reverse language pair', async () => {
     const api = fakeTranslatorApi({ translated: 'Good afternoon' });
     const engine = new ChromeTranslator({ Translator: api });

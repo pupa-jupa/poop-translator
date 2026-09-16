@@ -20,6 +20,7 @@ import type {
   DictionaryVariant,
   OcrLanguage,
   OcrRecognitionResult,
+  PageTargetLanguage,
   RegionRect,
   Settings,
   SourceMode,
@@ -29,7 +30,7 @@ import type {
 
 const engine = new ChromeTranslator();
 const repository = getStorageClient();
-let settings: Settings = { sourceMode: 'en', saveHistory: true, showSelectionButton: true, textScale: 115 };
+let settings: Settings = { sourceMode: 'en', pageTargetLanguage: 'ru', saveHistory: true, showSelectionButton: true, textScale: 115 };
 let host: HTMLDivElement | undefined;
 let layer: HTMLDivElement | undefined;
 let selectionButton: HTMLButtonElement | undefined;
@@ -664,7 +665,7 @@ function dismissPagePrompt(): void {
   pagePrompt = undefined;
 }
 
-function showPagePrompt(sourceMode: SourceMode): void {
+function showPagePrompt(targetLanguage: PageTargetLanguage): void {
   const operationId = ++pageOperationId;
   pageAbort?.abort();
   pageSession.restore();
@@ -673,7 +674,7 @@ function showPagePrompt(sourceMode: SourceMode): void {
   prompt.className = 'pt-page-prompt';
   prompt.innerHTML = `
     <span class="pt-card-mark">${poopSvg}</span>
-    <div><strong>Перевести эту страницу?</strong><span>Нажатие разрешит Chrome подготовить локальный переводчик.</span></div>
+    <div><strong>Перевести страницу на ${targetLanguage === 'ru' ? 'русский' : 'английский'}?</strong><span>Нажатие разрешит Chrome подготовить локальный переводчик.</span></div>
     <div class="pt-page-prompt__buttons"></div>`;
   const buttons = prompt.querySelector<HTMLDivElement>('.pt-page-prompt__buttons')!;
   const cancel = makeButton('Не сейчас');
@@ -688,7 +689,7 @@ function showPagePrompt(sourceMode: SourceMode): void {
     pageSession = session;
     pageAbort = controller;
     // Start model creation before the first await to preserve activation.
-    const preparation = engine.prepareForMode(sourceMode, {
+    const preparation = engine.prepareForPageTarget(targetLanguage, {
       onProgress(percent) {
         if (operationId === pageOperationId) {
           setPageStatus({ state: 'translating', completed: percent, total: 100 });
@@ -696,7 +697,7 @@ function showPagePrompt(sourceMode: SourceMode): void {
       },
     });
     dismissPagePrompt();
-    void runPageTranslation(sourceMode, preparation, operationId, session, controller);
+    void runPageTranslation(targetLanguage, preparation, operationId, session, controller);
   });
   buttons.append(cancel, start);
   ensureLayer().append(prompt);
@@ -705,7 +706,7 @@ function showPagePrompt(sourceMode: SourceMode): void {
 }
 
 async function runPageTranslation(
-  sourceMode: SourceMode,
+  targetLanguage: PageTargetLanguage,
   preparation: Promise<void>,
   operationId: number,
   session: PageTranslationSession,
@@ -717,7 +718,7 @@ async function runPageTranslation(
     if (operationId !== pageOperationId || controller.signal.aborted) return;
     const summary = await session.translate(
       findMainContent(),
-      async (text) => (await engine.translate(text, sourceMode)).translation,
+      async (text) => engine.translatePageText(text, targetLanguage),
       (completed, total) => {
         if (operationId === pageOperationId) setPageStatus({ state: 'translating', completed, total });
       },
@@ -818,7 +819,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
           .catch((error) => respond({ ok: false, error: String(error) }));
         return true;
       case 'TRANSLATE_PAGE':
-        showPagePrompt(message.sourceMode);
+        showPagePrompt(message.targetLanguage);
         respond({ ok: true, data: pageStatus });
         return false;
       case 'RESTORE_PAGE':

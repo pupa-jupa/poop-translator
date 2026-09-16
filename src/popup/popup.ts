@@ -36,6 +36,7 @@ const translateForm = required<HTMLFormElement>('[data-form="translate"]');
 const translateButton = translateForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 const sourceMode = required<HTMLSelectElement>('[data-control="source-mode"]');
 const settingsSourceMode = required<HTMLSelectElement>('[data-control="settings-source-mode"]');
+const pageTargetLanguage = required<HTMLSelectElement>('[data-control="page-target-language"]');
 const targetLanguageLabel = required<HTMLElement>('[data-target-language]');
 const saveHistory = required<HTMLInputElement>('[data-control="save-history"]');
 const selectionButtonSetting = required<HTMLInputElement>('[data-control="selection-button"]');
@@ -85,6 +86,7 @@ function setBusy(busy: boolean, label = 'Перевести'): void {
 function syncSettingsControls(): void {
   sourceMode.value = state.settings.sourceMode;
   settingsSourceMode.value = state.settings.sourceMode;
+  pageTargetLanguage.value = state.settings.pageTargetLanguage;
   saveHistory.checked = state.settings.saveHistory;
   selectionButtonSetting.checked = state.settings.showSelectionButton;
   textScale.value = String(state.settings.textScale);
@@ -665,7 +667,7 @@ importFile.addEventListener('change', () => void (async () => {
 
 required<HTMLButtonElement>('[data-action="translate-page"]').addEventListener('click', () => {
   void sendToActiveTab<PageStatus>({
-    type: 'TRANSLATE_PAGE', requestId: createRequestId(), sourceMode: state.settings.sourceMode,
+    type: 'TRANSLATE_PAGE', requestId: createRequestId(), targetLanguage: pageTargetLanguage.value === 'en' ? 'en' : 'ru',
   }).then((response) => {
     if (!response.ok || !response.data) throw new Error(response.error ?? 'Страница не ответила.');
     renderPageStatus(response.data);
@@ -673,6 +675,13 @@ required<HTMLButtonElement>('[data-action="translate-page"]').addEventListener('
   }).catch((error) => {
     renderPageStatus({ state: 'error', completed: 0, total: 0, error: error.message });
   });
+});
+
+pageTargetLanguage.addEventListener('change', () => {
+  const selected = pageTargetLanguage.value === 'en' ? 'en' : 'ru';
+  void repository.updateSettings({ pageTargetLanguage: selected })
+    .then(() => { state.settings.pageTargetLanguage = selected; showToast('Язык страницы сохранён'); })
+    .catch((error) => { pageTargetLanguage.value = state.settings.pageTargetLanguage; showToast(error instanceof Error ? error.message : 'Не удалось сохранить настройку'); });
 });
 
 required<HTMLButtonElement>('[data-action="translate-region"]').addEventListener('click', () => {

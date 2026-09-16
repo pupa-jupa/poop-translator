@@ -1,4 +1,4 @@
-import type { OcrLanguage, OcrRecognitionResult, RegionRect, SourceMode, TranslationSource } from './types';
+import type { OcrLanguage, OcrRecognitionResult, PageTargetLanguage, RegionRect, SourceMode, TranslationSource } from './types';
 
 export type PageOperationState = 'idle' | 'awaiting-activation' | 'translating' | 'translated' | 'error';
 
@@ -13,7 +13,7 @@ export type ContentRequest =
   | { type: 'SHOW_SELECTION_TRANSLATOR'; requestId: string; text: string; source: Extract<TranslationSource, 'context-menu'>; sourceMode: Exclude<SourceMode, 'auto'> }
   | { type: 'START_REGION_SELECTION'; requestId: string }
   | { type: 'REGION_OCR_STARTED'; requestId: string }
-  | { type: 'TRANSLATE_PAGE'; requestId: string; sourceMode: SourceMode }
+  | { type: 'TRANSLATE_PAGE'; requestId: string; targetLanguage: PageTargetLanguage }
   | { type: 'RESTORE_PAGE'; requestId: string }
   | { type: 'GET_PAGE_STATUS'; requestId: string };
 
@@ -63,7 +63,7 @@ export function isContentRequest(value: unknown): value is ContentRequest {
         && value.source === 'context-menu'
         && (value.sourceMode === 'en' || value.sourceMode === 'ru');
     case 'TRANSLATE_PAGE':
-      return value.sourceMode === 'en' || value.sourceMode === 'ru' || value.sourceMode === 'auto';
+      return value.targetLanguage === 'en' || value.targetLanguage === 'ru';
     case 'START_REGION_SELECTION':
     case 'REGION_OCR_STARTED':
     case 'RESTORE_PAGE':

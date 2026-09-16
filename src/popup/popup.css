@@ -107,10 +107,13 @@ textarea::placeholder, input::placeholder { color: #777080; }
 .result-actions .button { flex: 1; min-height: 34px; }
 .inline-error { margin-top: 10px; padding: 10px 12px; border: 1px solid rgba(255,158,174,.18); border-radius: 12px; background: rgba(255,158,174,.07); color: var(--danger); font-size: 12px; line-height: 1.45; }
 
-.page-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 13px 0 0; border-top: 1px solid rgba(255,255,255,.055); }
+.page-tools { display: grid; gap: 12px; margin-top: 14px; padding: 13px 0 0; border-top: 1px solid rgba(255,255,255,.055); }
 .section-kicker { color: var(--pink); font-size: 11px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
-.page-tools p { max-width: 200px; margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-.page-actions { display: flex; gap: 6px; }
+.page-tools p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.page-actions { display: flex; align-items: end; gap: 6px; flex-wrap: wrap; }
+.page-target { display: grid; flex: 1 1 125px; gap: 4px; color: var(--muted); font-size: 11px; }
+.page-target select { min-height: 36px; padding: 4px 10px; border: 1px solid #b6507d; border-radius: 12px; color: var(--text); background: #5f2340; font: inherit; cursor: pointer; }
+.page-target select:focus-visible { outline: 2px solid #ffabd1; outline-offset: 2px; }
 .page-actions .button { min-height: 38px; padding-inline: 11px; font-size: 11px; }
 
 .region-tool { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 10px; margin: 0 0 14px; padding: 12px; border: 1px solid #b6507d; border-radius: 20px; background: linear-gradient(145deg, #762c4c, #49172f); }
@@ -203,7 +206,7 @@ h2 { margin: 3px 0 0; font-size: 22px; letter-spacing: -.035em; }
 .brand-copy p, .result-variants__head, .text-button, .inline-error, .modal--confirm p { font-size: calc(12px * var(--text-scale)); }
 .engine-pill, .tab-bar button, .language-row label, .target-language small, .composer-footer,
 .button--small, .result-head, .result-variants__head small, .result-variant__meta, .section-kicker,
-.page-tools p, .page-actions .button, .region-tool p, .item-meta, .mini-action, .empty-state p,
+.page-tools p, .page-actions .button, .page-target, .region-tool p, .item-meta, .mini-action, .empty-state p,
 .setting-row small, .danger-zone small, .setting-row--stack select, .engine-card p, .modal label,
 .toast { font-size: calc(11px * var(--text-scale)); }
 .button, .result-original, .result-variant, .search-box input, .setting-row strong,
