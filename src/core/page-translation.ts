@@ -130,14 +130,17 @@ export class PageTranslationSession {
       const trailing = original.match(/\s*$/)?.[0] ?? '';
       try {
         const translatedParts: string[] = [];
-        for (const chunk of splitText(original, this.chunkLimit)) {
+        const chunks = splitText(original, this.chunkLimit);
+        let changed = false;
+        for (const chunk of chunks) {
           if (signal?.aborted) throw new DOMException('Операция отменена', 'AbortError');
           const translatedPart = (await translateText(chunk)).trim();
           if (signal?.aborted) throw new DOMException('Операция отменена', 'AbortError');
+          if (translatedPart !== chunk) changed = true;
           translatedParts.push(translatedPart);
         }
-        const translated = `${leading}${translatedParts.join(' ')}${trailing}`;
-        if (node.isConnected && node.data === original) {
+        const translated = changed ? `${leading}${translatedParts.join(' ')}${trailing}` : original;
+        if (changed && node.isConnected && node.data === original) {
           node.data = translated;
           this.snapshots.set(node, { original, translated });
         }

@@ -334,6 +334,14 @@ try {
   await backupCard.waitFor({ state: 'detached' });
   await popup.locator('[data-tab="translate"]').click();
   await popup.waitForTimeout(250);
+  if (await popup.locator('[data-control="page-target-language"]').inputValue() !== 'ru') {
+    throw new Error('Older settings did not default the page target to Russian');
+  }
+  await popup.locator('[data-control="page-target-language"]').selectOption('en');
+  await popup.waitForFunction(async () => {
+    const stored = await chrome.storage.local.get('poopTranslatorState');
+    return stored.poopTranslatorState?.settings?.pageTargetLanguage === 'en';
+  });
   await popup.locator('[data-toast]').evaluate((element) => { element.hidden = true; });
   const screenshotPath = process.env.POOP_TRANSLATOR_SCREENSHOT_PATH
     ? resolve(process.env.POOP_TRANSLATOR_SCREENSHOT_PATH)
@@ -425,12 +433,17 @@ try {
     throw new Error(`Local OCR returned unexpected text: ${JSON.stringify(recognizedText)}`);
   }
   await page.keyboard.press('Escape');
+  await popup.locator('[data-action="translate-page"]').click();
+  await page.locator('[data-poop-translator-root] .pt-page-prompt').getByText('Перевести страницу на английский?').waitFor();
   await worker.evaluate(async (id) => {
-    await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-1', sourceMode: 'en' });
-    await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-2', sourceMode: 'en' });
+    await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-1', targetLanguage: 'ru' });
+    await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-2', targetLanguage: 'en' });
   }, tabId);
   if (await page.locator('[data-poop-translator-root] .pt-page-prompt').count() !== 1) {
     throw new Error('Overlapping page requests created more than one confirmation prompt');
+  }
+  if (!await page.locator('[data-poop-translator-root] .pt-page-prompt').getByText('Перевести страницу на английский?').count()) {
+    throw new Error('Page prompt did not state the selected target language');
   }
   await worker.evaluate((id) => chrome.tabs.sendMessage(id, {
     type: 'RESTORE_PAGE', requestId: 'pt-smoke-restore',

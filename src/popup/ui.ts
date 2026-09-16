@@ -79,6 +79,7 @@ export function mountPopupShell(root: HTMLElement): void {
           <section class="page-tools">
             <div><span class="section-kicker">Вся страница</span><p data-page-status aria-live="polite">Переведу основной текст, сохранив кнопки и ссылки.</p></div>
             <div class="page-actions">
+              <label class="page-target"><span>Язык страницы</span><select data-control="page-target-language" aria-label="Перевести страницу на"><option value="ru">На русский</option><option value="en">На английский</option></select></label>
               <button class="button button--soft" type="button" data-action="translate-page">Перевести страницу</button>
               <button class="icon-button" type="button" aria-label="Вернуть оригинал" title="Вернуть оригинал" data-action="restore-page">↶</button>
             </div>

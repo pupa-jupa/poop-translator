@@ -165,6 +165,20 @@ describe('StorageRepository', () => {
     });
   });
 
+  it('defaults older page settings to Russian and persists an English target in a backup', async () => {
+    const storage = new MemoryStorage();
+    storage.data[STORAGE_KEY] = {
+      ...DEFAULT_STATE,
+      schemaVersion: 1,
+      settings: { sourceMode: 'auto', saveHistory: true, showSelectionButton: true, textScale: 115 },
+    };
+    const repository = new StorageRepository(storage);
+    expect((await repository.loadState()).settings.pageTargetLanguage).toBe('ru');
+    await repository.updateSettings({ pageTargetLanguage: 'en' });
+    expect((await repository.loadState()).settings.pageTargetLanguage).toBe('en');
+    expect(createBackup(await repository.loadState()).data.settings.pageTargetLanguage).toBe('en');
+  });
+
   it('does not persist translations when history is disabled', async () => {
     const storage = new MemoryStorage();
     const repository = new StorageRepository(storage);

@@ -1,4 +1,4 @@
-import type { EngineAvailability, SourceMode, TranslationResult } from '../shared/types';
+import type { EngineAvailability, PageTargetLanguage, SourceMode, TranslationResult } from '../shared/types';
 
 type AvailabilityValue = string;
 
@@ -205,6 +205,36 @@ export class ChromeTranslator {
       await Promise.all(preparations);
     } catch (error) {
       throw messageForCreationError(error);
+    }
+  }
+
+  async prepareForPageTarget(targetLanguage: PageTargetLanguage, callbacks: TranslationCallbacks = {}): Promise<void> {
+    const sourceLanguage = targetLanguage === 'ru' ? 'en' : 'ru';
+    // Both create calls begin in the user's click task, before the first await.
+    const translator = this.createTranslator(sourceLanguage, targetLanguage, callbacks);
+    // Script detection handles plain English/Russian immediately. A detector download
+    // must not hold the entire page while the required translator is already ready.
+    const detector = this.createDetector({});
+    if (detector) void detector.catch(() => undefined);
+    try {
+      await translator;
+    } catch (error) {
+      throw messageForCreationError(error, sourceLanguage, targetLanguage);
+    }
+  }
+
+  async translatePageText(text: string, targetLanguage: PageTargetLanguage, callbacks: TranslationCallbacks = {}): Promise<string> {
+    const original = text.trim();
+    if (!original) return original;
+    const sourceLanguage = await this.detectSource(original, callbacks);
+    if (sourceLanguage === targetLanguage) return original;
+    try {
+      const translator = await this.createTranslator(sourceLanguage, targetLanguage, callbacks);
+      const translation = (await translator.translate(original)).trim();
+      if (!translation) throw new Error('Empty translation');
+      return translation;
+    } catch (error) {
+      throw messageForCreationError(error, sourceLanguage, targetLanguage);
     }
   }
 
