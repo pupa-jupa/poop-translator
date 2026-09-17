@@ -1,0 +1,3 @@
+## 2024-05-18 - Hiding purely visual characters from screen readers
+**Learning:** The popup component structure makes extensive use of Unicode characters for pure decoration (like arrows →, hearts ♡, and directions ↓↑). Without ARIA labels on parent components and `aria-hidden` attributes on these symbols, screen readers will interpret them literally, harming the auditory experience of the user interface.
+**Action:** Always wrap non-semantic character-based icons in `span` elements with `aria-hidden="true"`, ensuring the meaning is either conveyed by an adjacent `aria-label` or inherently unneeded.

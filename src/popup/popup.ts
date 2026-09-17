@@ -63,6 +63,11 @@ const confirmTitle = required<HTMLElement>('[data-confirm-title]');
 const confirmText = required<HTMLElement>('[data-confirm-text]');
 const toast = required<HTMLElement>('[data-toast]');
 
+if (/Mac|iPod|iPhone|iPad/.test(navigator.platform)) {
+  const enterHint = document.querySelector('.enter-hint');
+  if (enterHint) enterHint.textContent = 'Cmd + Enter';
+}
+
 function showToast(message: string): void {
   window.clearTimeout(toastTimer);
   toast.textContent = message;
@@ -114,7 +119,7 @@ function miniButton(label: string, action: () => void | Promise<void>): HTMLButt
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'mini-action';
-  button.textContent = label;
+  button.innerHTML = label.replace('♡', '<span aria-hidden="true">♡</span>');
   button.addEventListener('click', () => void action());
   return button;
 }
@@ -135,7 +140,7 @@ function renderHistory(): void {
     const card = document.createElement('article');
     card.className = 'item-card';
     card.innerHTML = `
-      <div class="item-main"><p></p><span class="item-arrow">→</span><p></p></div>
+      <div class="item-main"><p></p><span class="item-arrow" aria-hidden="true">→</span><p></p></div>
       <div class="item-meta"><span></span><div class="item-buttons"></div></div>`;
     const paragraphs = card.querySelectorAll('p');
     paragraphs[0]!.textContent = entry.original;
@@ -186,7 +191,7 @@ function renderDictionary(): void {
     const card = document.createElement('article');
     card.className = 'item-card';
     card.innerHTML = `
-      <div class="item-main"><p></p><span class="item-arrow">→</span><p></p></div>
+      <div class="item-main"><p></p><span class="item-arrow" aria-hidden="true">→</span><p></p></div>
       <div class="item-meta"><span></span><div class="item-buttons"></div></div>`;
     const paragraphs = card.querySelectorAll('p');
     paragraphs[0]!.textContent = entry.original;
