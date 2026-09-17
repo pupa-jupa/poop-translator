@@ -2,16 +2,16 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
-    const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
-    const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
-  }
+// ⚡ Bolt optimization: Check skip criteria only for the given element, not its ancestors.
+// The TreeWalker with FILTER_REJECT handles pruning the whole subtree, avoiding O(N*D) complexity.
+function isSkippedElement(current: Element): boolean {
+  if (SKIPPED_TAGS.has(current.tagName)) return true;
+  if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
+  if (current.hasAttribute('data-poop-translator-root')) return true;
+  const editable = current.getAttribute('contenteditable');
+  if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
+  const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
+  if (style?.display === 'none' || style?.visibility === 'hidden') return true;
   return false;
 }
 
@@ -21,11 +21,20 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  // ⚡ Bolt optimization: Use TreeWalker to prune skipped element subtrees early (FILTER_REJECT)
+  // instead of climbing the DOM for every text node, which reduces redundant style/attribute checks significantly.
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (isSkippedElement(node as Element)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_SKIP;
+      }
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node as Text;
+        if (!text.data.trim()) return NodeFilter.FILTER_SKIP;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+      return NodeFilter.FILTER_SKIP;
     },
   });
   const result: Text[] = [];
