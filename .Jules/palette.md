@@ -1,0 +1,3 @@
+## 2025-02-12 - Inline Feedback Pattern
+**Learning:** In this extension, actions like "Copy" and "Save to Dictionary" had toast notifications, but lacked immediate inline feedback on the button itself. This disconnect can cause users to double-check or repeat actions if they look away from the toast area. Adding inline, temporary text changes (e.g., "Скопировано ✓") on the button that triggered the action provided a much clearer and more satisfying UX.
+**Action:** For future micro-UX improvements involving simple click actions, consider replacing button text temporarily to confirm the action right where the user's focus is, rather than relying solely on global toast notifications.

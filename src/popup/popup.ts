@@ -267,7 +267,10 @@ function renderTranslationResult(result: TranslationResult): void {
   resultTranslation.textContent = result.alreadyRussian ? 'Текст уже на русском' : result.translation;
   resultLanguage.textContent = `${result.sourceLanguage.toUpperCase()} → ${result.targetLanguage.toUpperCase()}`;
   resultCard.hidden = false;
-  required<HTMLButtonElement>('[data-action="save-result"]').disabled = result.alreadyRussian;
+  const saveBtn = required<HTMLButtonElement>('[data-action="save-result"]');
+  saveBtn.disabled = result.alreadyRussian;
+  saveBtn.textContent = '♡ В словарь';
+  required<HTMLButtonElement>('[data-action="copy-result"]').textContent = 'Копировать';
   void renderAlternativeVariants(result);
 }
 
@@ -367,6 +370,7 @@ root.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
 });
 
 sourceText.addEventListener('input', () => {
+  translateError.hidden = true;
   charCount.textContent = `${sourceText.value.length.toLocaleString('ru-RU')} / 10 000`;
 });
 sourceText.addEventListener('keydown', (event) => {
@@ -463,18 +467,26 @@ textScale.addEventListener('change', () => {
 historySearch.addEventListener('input', renderHistory);
 dictionarySearch.addEventListener('input', renderDictionary);
 
-required<HTMLButtonElement>('[data-action="copy-result"]').addEventListener('click', () => {
+required<HTMLButtonElement>('[data-action="copy-result"]').addEventListener('click', (event) => {
   if (!latestResult) return;
+  const btn = event.currentTarget as HTMLButtonElement;
   void navigator.clipboard.writeText(latestResult.translation)
-    .then(() => showToast('Перевод скопирован'))
+    .then(() => {
+      showToast('Перевод скопирован');
+      btn.textContent = 'Скопировано ✓';
+      setTimeout(() => { if (btn.textContent === 'Скопировано ✓') btn.textContent = 'Копировать'; }, 1500);
+    })
     .catch(() => showToast('Не удалось скопировать перевод'));
 });
 
-required<HTMLButtonElement>('[data-action="save-result"]').addEventListener('click', () => {
+required<HTMLButtonElement>('[data-action="save-result"]').addEventListener('click', (event) => {
   if (!latestResult || latestResult.alreadyRussian) return;
+  const btn = event.currentTarget as HTMLButtonElement;
   void repository.addDictionaryEntry(latestResult).then(async (result) => {
     await refreshState();
     showToast(result.added ? 'Добавлено в словарь' : 'Уже в словаре');
+    btn.textContent = result.added ? '♥ Сохранено' : 'Уже в словаре';
+    setTimeout(() => { if (btn.textContent === '♥ Сохранено' || btn.textContent === 'Уже в словаре') btn.textContent = '♡ В словарь'; }, 1500);
   }).catch(() => showToast('Не удалось добавить перевод в словарь'));
 });
 

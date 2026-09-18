@@ -44,7 +44,7 @@ export function mountPopupShell(root: HTMLElement): void {
 
           <form class="translate-form" data-form="translate">
             <label class="sr-only" for="source-text">Текст для перевода</label>
-            <textarea id="source-text" aria-label="Текст для перевода" maxlength="10000" placeholder="Напишите что-нибудь на английском…"></textarea>
+            <textarea id="source-text" aria-label="Текст для перевода" maxlength="10000" placeholder="Напишите что-нибудь на английском…" autofocus></textarea>
             <div class="composer-footer">
               <span data-char-count>0 / 10 000</span>
               <span class="enter-hint">Ctrl + Enter</span>

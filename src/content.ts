@@ -263,7 +263,11 @@ async function showTranslationCard(
       const copy = makeButton('Копировать');
       copy.addEventListener('click', () => {
         void navigator.clipboard.writeText(result.translation)
-          .then(() => showToast('Скопировано'))
+          .then(() => {
+            showToast('Скопировано');
+            copy.textContent = 'Скопировано ✓';
+            setTimeout(() => { if (copy.textContent === 'Скопировано ✓') copy.textContent = 'Копировать'; }, 1500);
+          })
           .catch(() => showToast('Не удалось скопировать'));
       });
       const add = makeButton('В словарь', 'pt-button pt-button--primary');
@@ -273,7 +277,8 @@ async function showTranslationCard(
           original: result.original,
           translation: result.translation,
         }).then((added) => {
-          add.textContent = added.added ? 'Добавлено ✓' : 'Уже в словаре';
+          add.textContent = added.added ? '♥ Сохранено' : 'Уже в словаре';
+          setTimeout(() => { if (add.textContent === '♥ Сохранено' || add.textContent === 'Уже в словаре') add.textContent = 'В словарь'; }, 1500);
         }).catch(() => {
           add.disabled = false;
           showToast('Не удалось добавить перевод в словарь');
