@@ -2,25 +2,59 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
-    const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
-    const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
-  }
-  return false;
-}
-
 export function findMainContent(documentRoot: Document = document): HTMLElement {
   return documentRoot.querySelector<HTMLElement>('main, article, [role="main"]') ?? documentRoot.body;
 }
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+
+  // Memoize skipped state to avoid redundant getComputedStyle calls on shared ancestors.
+  // The cache is scoped to a single collection pass to prevent stale state issues
+  // in dynamic web pages (e.g., if an element changes from display: none to block).
+  const skippedCache = new WeakMap<Element, boolean>();
+
+  function isSkippedElement(element: Element | null): boolean {
+    const path: Element[] = [];
+
+    for (let current = element; current; current = current.parentElement) {
+      if (skippedCache.has(current)) {
+        const isSkipped = skippedCache.get(current)!;
+        if (isSkipped) {
+          for (const node of path) skippedCache.set(node, true);
+          return true;
+        }
+        // If the current node isn't skipped, we can immediately return false
+        // because its ancestors must have also been evaluated as not skipped.
+        for (const node of path) skippedCache.set(node, false);
+        return false;
+      }
+
+      path.push(current);
+
+      let skipped = false;
+      if (SKIPPED_TAGS.has(current.tagName)) skipped = true;
+      else if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') skipped = true;
+      else if (current.hasAttribute('data-poop-translator-root')) skipped = true;
+      else {
+        const editable = current.getAttribute('contenteditable');
+        if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) skipped = true;
+        else {
+          const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
+          if (style?.display === 'none' || style?.visibility === 'hidden') skipped = true;
+        }
+      }
+
+      if (skipped) {
+        for (const node of path) skippedCache.set(node, true);
+        return true;
+      }
+    }
+
+    for (const node of path) skippedCache.set(node, false);
+    return false;
+  }
+
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
