@@ -22,6 +22,10 @@ await copy(
   join(projectRoot, 'node_modules', 'tesseract.js', 'dist', 'worker.min.js.LICENSE.txt'),
   join(destinationRoot, 'worker.min.js.LICENSE.txt'),
 );
+await copy(
+  join(projectRoot, 'node_modules', 'pdfjs-dist', 'LICENSE'),
+  join(projectRoot, 'dist', 'pdf', 'LICENSE-APACHE-2.0.txt'),
+);
 
 const coreRoot = join(projectRoot, 'node_modules', 'tesseract.js-core');
 const coreFiles = (await readdir(coreRoot)).filter((name) => name.endsWith('-lstm.wasm.js'));

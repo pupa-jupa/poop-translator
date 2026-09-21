@@ -32,3 +32,9 @@ https://github.com/tesseract-ocr/tessdata_best
 The complete Apache License 2.0 text and the worker's third-party notices
 are included under the extension's ocr/ directory. OCR files are bundled
 locally; the extension does not load them from a CDN at runtime.
+
+Mozilla PDF.js 6.3.289 (`pdfjs-dist`) is distributed under the Apache License
+2.0: https://github.com/mozilla/pdf.js
+
+The PDF.js library and module worker are bundled locally. The complete Apache
+License 2.0 text is included under the extension's pdf/ directory.

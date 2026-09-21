@@ -49,6 +49,12 @@ export function mountPopupShell(root: HTMLElement): void {
             <button class="button button--accent button--small" type="button" data-action="translate-region">Выбрать область</button>
           </section>
 
+          <section class="pdf-tool">
+            <div class="pdf-tool__icon" aria-hidden="true">PDF</div>
+            <div><span class="section-kicker">Документы</span><p>Откройте PDF в отдельной вкладке — текст и сканы останутся на устройстве.</p></div>
+            <button class="button button--soft button--small" type="button" data-action="open-pdf">Открыть PDF</button>
+          </section>
+
           <form class="translate-form" data-form="translate">
             <label class="sr-only" for="source-text">Текст для перевода</label>
             <textarea id="source-text" aria-label="Текст для перевода" maxlength="10000" placeholder="Напишите что-нибудь на английском…"></textarea>

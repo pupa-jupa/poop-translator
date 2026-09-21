@@ -24,3 +24,7 @@
 - `@tesseract.js-data/eng` 1.0.0 и `@tesseract.js-data/rus` 1.0.0 — в метаданных npm-пакетов указана MIT; сами модели `4.0.0_best_int` основаны на [tessdata_best](https://github.com/tesseract-ocr/tessdata_best), где данные лицензированы под Apache-2.0.
 
 Worker, WebAssembly core и сжатые модели поставляются локально в `dist/ocr/`. Они не загружаются с CDN во время работы расширения. В `dist/ocr/LICENSE-APACHE-2.0.txt` включён полный текст Apache-2.0; уведомления о стороннем коде в worker лежат рядом с ним.
+
+## PDF.js
+
+Локальное чтение PDF использует `pdfjs-dist` / Mozilla PDF.js 6.3.289 под Apache License 2.0. Код библиотеки и module worker входят в сборку расширения и не загружаются с CDN. Полный текст лицензии копируется в `dist/pdf/LICENSE-APACHE-2.0.txt`.

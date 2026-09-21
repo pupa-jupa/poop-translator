@@ -693,6 +693,12 @@ required<HTMLButtonElement>('[data-action="translate-region"]').addEventListener
     .catch((error) => showToast(error instanceof Error ? error.message : 'Не удалось начать выбор области'));
 });
 
+required<HTMLButtonElement>('[data-action="open-pdf"]').addEventListener('click', () => {
+  void chrome.tabs.create({ url: chrome.runtime.getURL('pdf.html') })
+    .then(() => window.close())
+    .catch(() => showToast('Не удалось открыть перевод PDF'));
+});
+
 required<HTMLButtonElement>('[data-action="restore-page"]').addEventListener('click', () => {
   void sendToActiveTab<PageStatus>({ type: 'RESTORE_PAGE', requestId: createRequestId() })
     .then((response) => response.data && renderPageStatus(response.data))
