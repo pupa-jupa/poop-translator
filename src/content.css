@@ -48,6 +48,7 @@ button { font: inherit; }
 
 .pt-selection-button:hover { transform: translateY(-2px) rotate(-2deg); }
 .pt-selection-button:focus-visible,
+.pt-variant:focus-visible,
 .pt-button:focus-visible,
 .pt-icon-button:focus-visible { outline: 3px solid rgba(198, 179, 255, .48); outline-offset: 3px; }
 

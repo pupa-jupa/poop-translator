@@ -75,7 +75,7 @@ textarea::placeholder, input::placeholder { color: #777080; }
 .button { min-height: 40px; padding: 0 14px; border: 1px solid rgba(255,255,255,.07); border-radius: 13px; background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 800; cursor: pointer; transition: transform .15s ease, background .15s ease, opacity .15s ease; }
 .button:hover { transform: translateY(-1px); background: var(--surface-3); }
 .button:active { transform: translateY(0) scale(.985); }
-.button:focus-visible, .icon-button:focus-visible, .text-button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(198,179,255,.38); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(198,179,255,.38); outline-offset: 2px; }
 .button[disabled] { cursor: default; opacity: .52; transform: none; }
 .button--hero { width: 100%; display: flex; align-items: center; justify-content: space-between; border: 0; color: #241d2b; background: linear-gradient(135deg, var(--pink), var(--lilac)); box-shadow: 0 9px 22px rgba(242,167,202,.15); }
 .button--hero:hover, .button--accent:hover { background: linear-gradient(135deg, var(--pink-strong), #d0c0ff); }
