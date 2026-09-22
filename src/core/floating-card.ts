@@ -5,6 +5,9 @@ export interface FloatingAnchor {
   bottom: number;
 }
 
+interface Point { x: number; y: number }
+interface Size { width: number; height: number }
+
 interface FloatingCardPlacement {
   anchor?: FloatingAnchor;
   cardWidth: number;
@@ -45,4 +48,40 @@ export function placeFloatingCard({
     left,
     top: clamp(preferredTop, margin, viewportHeight - visibleHeight - margin),
   };
+}
+
+export function clampFloatingCardPosition(
+  position: Point,
+  size: Size,
+  viewport: Size,
+  margin = 12,
+): Point {
+  const visibleWidth = Math.min(size.width, Math.max(0, viewport.width - margin * 2));
+  const visibleHeight = Math.min(size.height, Math.max(0, viewport.height - margin * 2));
+  return {
+    x: clamp(position.x, margin, viewport.width - visibleWidth - margin),
+    y: clamp(position.y, margin, viewport.height - visibleHeight - margin),
+  };
+}
+
+export function moveFloatingCardByKey(
+  position: Point,
+  key: string,
+  fine: boolean,
+  size: Size,
+  viewport: Size,
+): Point | undefined {
+  const step = fine ? 1 : 10;
+  const delta = {
+    ArrowLeft: { x: -step, y: 0 },
+    ArrowRight: { x: step, y: 0 },
+    ArrowUp: { x: 0, y: -step },
+    ArrowDown: { x: 0, y: step },
+  }[key];
+  if (!delta) return undefined;
+  return clampFloatingCardPosition(
+    { x: position.x + delta.x, y: position.y + delta.y },
+    size,
+    viewport,
+  );
 }

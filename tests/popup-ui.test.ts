@@ -12,10 +12,15 @@ describe('popup shell', () => {
     ]);
     expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');
     expect(root.querySelector<HTMLElement>('[data-view="translate"]')?.hidden).toBe(false);
-    expect(Array.from(root.querySelectorAll<HTMLOptionElement>('[data-control="source-mode"] option')).map((option) => option.value))
-      .toEqual(['en', 'ru', 'uk', 'de', 'fr', 'es', 'auto']);
-    expect(Array.from(root.querySelectorAll<HTMLOptionElement>('[data-control="target-language"] option')).map((option) => option.value))
-      .toEqual(['ru', 'en']);
+    const sourceLanguages = Array.from(root.querySelectorAll<HTMLOptionElement>('[data-control="source-mode"] option'))
+      .map((option) => option.value);
+    const targetLanguages = Array.from(root.querySelectorAll<HTMLOptionElement>('[data-control="target-language"] option'))
+      .map((option) => option.value);
+    expect(sourceLanguages).toHaveLength(40);
+    expect(sourceLanguages).toEqual(expect.arrayContaining(['en', 'ru', 'fr', 'ja', 'ko', 'zh', 'zh-Hant', 'auto']));
+    expect(targetLanguages).toHaveLength(39);
+    expect(targetLanguages.slice(0, 2)).toEqual(['ru', 'en']);
+    expect(targetLanguages).toEqual(expect.arrayContaining(['ja', 'ko', 'zh', 'zh-Hant']));
   });
 
   it('changes the visible panel and accessible selection together', () => {

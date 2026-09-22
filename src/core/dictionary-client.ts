@@ -6,8 +6,11 @@ export async function lookupAlternativeVariants(
   text: string,
   primaryTranslation: string,
   sourceLanguage: string,
+  targetLanguage: string,
 ): Promise<DictionaryVariant[]> {
-  if (sourceLanguage !== 'en' && sourceLanguage !== 'ru') return [];
+  const supportedPair = (sourceLanguage === 'en' && targetLanguage === 'ru')
+    || (sourceLanguage === 'ru' && targetLanguage === 'en');
+  if (!supportedPair) return [];
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'LOOKUP_DICTIONARY',

@@ -10,7 +10,7 @@ import type {
   ReviewRating,
   Settings,
 } from '../shared/types';
-import { isLanguageCode, isSourceMode, isTargetLanguage } from './languages';
+import { isLanguageCode, isOcrMode, isSourceMode, isTargetLanguage } from './languages';
 
 export type StorageMutationOperation =
   | 'updateSettings'
@@ -60,7 +60,8 @@ function isSettingsPatch(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return (value.sourceMode === undefined || isSourceMode(value.sourceMode))
     && (value.targetLanguage === undefined || isTargetLanguage(value.targetLanguage))
-    && (value.pageTargetLanguage === undefined || value.pageTargetLanguage === 'en' || value.pageTargetLanguage === 'ru')
+    && (value.pageTargetLanguage === undefined || isTargetLanguage(value.pageTargetLanguage))
+    && (value.ocrMode === undefined || isOcrMode(value.ocrMode))
     && (value.saveHistory === undefined || typeof value.saveHistory === 'boolean')
     && (value.showSelectionButton === undefined || typeof value.showSelectionButton === 'boolean')
     && (value.textScale === undefined || value.textScale === 100 || value.textScale === 115 || value.textScale === 130);

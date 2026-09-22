@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeFloatingCard } from '../src/core/floating-card';
+import { clampFloatingCardPosition, moveFloatingCardByKey, placeFloatingCard } from '../src/core/floating-card';
 
 describe('placeFloatingCard', () => {
   it('opens a tall card above a selection near the bottom edge', () => {
@@ -30,5 +30,21 @@ describe('placeFloatingCard', () => {
       viewportWidth: 800,
       viewportHeight: 768,
     })).toEqual({ left: 20, top: 50 });
+  });
+
+  it('clamps a manually moved card to every viewport edge', () => {
+    expect(clampFloatingCardPosition(
+      { x: 790, y: -20 }, { width: 350, height: 480 }, { width: 800, height: 600 }, 12,
+    )).toEqual({ x: 438, y: 12 });
+  });
+
+  it('moves by keyboard with normal and fine steps', () => {
+    const size = { width: 350, height: 300 };
+    const viewport = { width: 800, height: 600 };
+    expect(moveFloatingCardByKey({ x: 100, y: 100 }, 'ArrowRight', false, size, viewport))
+      .toEqual({ x: 110, y: 100 });
+    expect(moveFloatingCardByKey({ x: 100, y: 100 }, 'ArrowUp', true, size, viewport))
+      .toEqual({ x: 100, y: 99 });
+    expect(moveFloatingCardByKey({ x: 100, y: 100 }, 'Enter', false, size, viewport)).toBeUndefined();
   });
 });

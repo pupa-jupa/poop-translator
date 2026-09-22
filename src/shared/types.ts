@@ -1,10 +1,17 @@
-export type LanguageCode = 'en' | 'ru' | 'uk' | 'de' | 'fr' | 'es';
+export type LanguageCode =
+  | 'ar' | 'bg' | 'bn' | 'cs' | 'da' | 'de' | 'el' | 'en' | 'es' | 'fi'
+  | 'fr' | 'he' | 'hi' | 'hr' | 'hu' | 'id' | 'it' | 'ja' | 'kn' | 'ko'
+  | 'lt' | 'mr' | 'nl' | 'no' | 'pl' | 'pt' | 'ro' | 'ru' | 'sk' | 'sl'
+  | 'sv' | 'ta' | 'te' | 'th' | 'tr' | 'uk' | 'vi' | 'zh' | 'zh-Hant';
 export type SourceMode = LanguageCode | 'auto';
-export type TargetLanguage = 'en' | 'ru';
+export type TargetLanguage = LanguageCode;
 export type PageTargetLanguage = TargetLanguage;
 export type TextScale = 100 | 115 | 130;
 export type TranslationSource = 'manual' | 'selection' | 'context-menu' | 'ocr-region';
-export type OcrLanguage = 'eng' | 'rus' | 'ukr' | 'deu' | 'fra' | 'spa';
+export type OcrLanguage =
+  | 'eng' | 'rus' | 'ukr' | 'deu' | 'fra' | 'spa'
+  | 'jpn' | 'kor' | 'chi_sim' | 'chi_tra';
+export type OcrMode = OcrLanguage | 'auto';
 
 export interface Point {
   x: number;
@@ -41,6 +48,7 @@ export interface Settings {
   sourceMode: SourceMode;
   targetLanguage: TargetLanguage;
   pageTargetLanguage: PageTargetLanguage;
+  ocrMode: OcrMode;
   saveHistory: boolean;
   showSelectionButton: boolean;
   textScale: TextScale;
@@ -84,7 +92,7 @@ export interface ReviewProgress {
 }
 
 export interface ExtensionState {
-  schemaVersion: 3;
+  schemaVersion: 4;
   settings: Settings;
   history: HistoryEntry[];
   dictionary: DictionaryEntry[];
@@ -93,7 +101,7 @@ export interface ExtensionState {
 
 export interface ExtensionBackup {
   format: 'poop-translator-backup';
-  version: 3;
+  version: 4;
   exportedAt: string;
   data: ExtensionState;
 }

@@ -31,6 +31,10 @@ const server = createServer((request, response) => {
     <div id="ocr-fixture" style="display:inline-block;padding:18px;color:#000;font:700 48px/1 Arial,sans-serif">HELLO OCR</div>
     <div id="ocr-russian" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 48px/1 Arial,sans-serif">ПРИВЕТ</div>
     <div id="ocr-german" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 48px/1 Arial,sans-serif">GUTEN TAG</div>
+    <div id="ocr-japanese" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 56px/1 'Yu Gothic',sans-serif">日本語</div>
+    <div id="ocr-korean" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 56px/1 'Malgun Gothic',sans-serif">한국어</div>
+    <div id="ocr-chinese-simplified" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 56px/1 'Microsoft YaHei',sans-serif">简体中文</div>
+    <div id="ocr-chinese-traditional" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 56px/1 'Microsoft JhengHei',sans-serif">繁體中文</div>
     ${imageFixture ? '<img id="ocr-image" src="/fixture.png" style="display:block;margin-top:20px" />' : ''}
   </body></html>`);
 });
@@ -89,7 +93,7 @@ try {
     type: 'STORAGE_MUTATION',
     requestId: 'pt-ocr-smoke-language',
     operation: 'updateSettings',
-    payload: { sourceMode: 'ru' },
+    payload: { ocrMode: 'rus' },
   }));
   if (!updatedSettings?.ok) throw new Error(`Could not select Russian OCR: ${JSON.stringify(updatedSettings)}`);
   await settingsPage.close();
@@ -113,7 +117,7 @@ try {
   await germanSettings.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
   const germanMode = await germanSettings.evaluate(() => chrome.runtime.sendMessage({
     type: 'STORAGE_MUTATION', requestId: 'pt-ocr-smoke-german-language',
-    operation: 'updateSettings', payload: { sourceMode: 'de', targetLanguage: 'ru' },
+    operation: 'updateSettings', payload: { ocrMode: 'deu', sourceMode: 'de', targetLanguage: 'ru' },
   }));
   if (!germanMode?.ok) throw new Error(`Could not select German OCR: ${JSON.stringify(germanMode)}`);
   await germanSettings.close();
@@ -138,10 +142,12 @@ try {
     await options.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
     await options.evaluate(() => chrome.runtime.sendMessage({
       type: 'STORAGE_MUTATION', requestId: 'pt-ocr-image-mode',
-      operation: 'updateSettings', payload: { sourceMode: 'auto' },
+      operation: 'updateSettings', payload: { ocrMode: 'auto', sourceMode: 'auto' },
     }));
     await options.close();
     await page.bringToFront();
+    await page.locator('#ocr-image').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
     await worker.evaluate((id) => chrome.tabs.sendMessage(id, {
       type: 'START_REGION_SELECTION', requestId: 'pt-ocr-image-start',
     }), tabId);
@@ -152,7 +158,15 @@ try {
     await page.mouse.down();
     await page.mouse.move(imageBox.x + imageBox.width, imageBox.y + imageBox.height, { steps: 4 });
     await page.mouse.up();
-    await editor.waitFor({ timeout: 90_000 });
+    try {
+      await editor.waitFor({ timeout: 90_000 });
+    } catch (error) {
+      const details = await page.locator('[data-poop-translator-root]').evaluate((host) => ({
+        card: host.shadowRoot?.querySelector('.pt-card')?.textContent,
+        overlay: Boolean(host.shadowRoot?.querySelector('.pt-region-overlay')),
+      }));
+      throw new Error(`Image OCR did not open editor: ${JSON.stringify(details)}; ${error.message}`);
+    }
     imageText = (await editor.inputValue()).replace(/\s+/g, ' ').trim();
     const expected = process.env.POOP_OCR_EXPECTED_TEXT
       ?? (process.env.POOP_OCR_FIXTURE_PATH ? '' : 'Read this image|Keep learning|Small steps');
@@ -162,7 +176,44 @@ try {
       }
     }
   }
-  console.log(JSON.stringify({ localOcr: true, english: text, russian: russianText, german: germanText, imageText }, null, 2));
+  const cjkCases = [
+    { mode: 'jpn', selector: '#ocr-japanese', script: /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u },
+    { mode: 'kor', selector: '#ocr-korean', script: /\p{Script=Hangul}/u },
+    { mode: 'chi_sim', selector: '#ocr-chinese-simplified', script: /\p{Script=Han}/u },
+    { mode: 'chi_tra', selector: '#ocr-chinese-traditional', script: /\p{Script=Han}/u },
+  ];
+  const cjkResults = {};
+  for (const item of cjkCases) {
+    await page.keyboard.press('Escape');
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
+    const changed = await options.evaluate((ocrMode) => chrome.runtime.sendMessage({
+      type: 'STORAGE_MUTATION', requestId: `pt-ocr-smoke-${ocrMode}`,
+      operation: 'updateSettings', payload: { ocrMode, sourceMode: 'auto', targetLanguage: 'ru' },
+    }), item.mode);
+    if (!changed?.ok) throw new Error(`Could not select ${item.mode} OCR: ${JSON.stringify(changed)}`);
+    await options.close();
+    await page.bringToFront();
+    await page.waitForTimeout(400);
+    await page.locator(item.selector).scrollIntoViewIfNeeded();
+    await worker.evaluate(({ id, mode }) => chrome.tabs.sendMessage(id, {
+      type: 'START_REGION_SELECTION', requestId: `pt-ocr-smoke-${mode}-start`,
+    }), { id: tabId, mode: item.mode });
+    await overlay.waitFor();
+    const box = await page.locator(item.selector).boundingBox();
+    if (!box) throw new Error(`Could not measure ${item.mode} OCR fixture`);
+    await page.mouse.move(box.x + 2, box.y + 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 2, box.y + box.height - 2, { steps: 4 });
+    await page.mouse.up();
+    await editor.waitFor({ timeout: 90_000 });
+    const recognized = (await editor.inputValue()).replace(/\s+/g, ' ').trim();
+    if (!recognized || !item.script.test(recognized)) {
+      throw new Error(`Unexpected ${item.mode} OCR result: ${JSON.stringify(recognized)}`);
+    }
+    cjkResults[item.mode] = recognized;
+  }
+  console.log(JSON.stringify({ localOcr: true, english: text, russian: russianText, german: germanText, imageText, cjkResults }, null, 2));
 } finally {
   await context.close();
   await new Promise((resolveServer) => server.close(resolveServer));

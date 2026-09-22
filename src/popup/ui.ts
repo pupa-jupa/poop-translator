@@ -1,4 +1,37 @@
+import { OCR_LANGUAGES, TRANSLATION_LANGUAGES } from '../core/languages';
+import type { LanguageCode } from '../shared/types';
+
 export type PopupTab = 'translate' | 'history' | 'dictionary' | 'review' | 'settings';
+
+function populateLanguageOptions(root: ParentNode): void {
+  const byCode = new Map(TRANSLATION_LANGUAGES.map((language) => [language.code, language]));
+  const sourceOrder = [...TRANSLATION_LANGUAGES];
+  const targetCodes: LanguageCode[] = ['ru', 'en', ...TRANSLATION_LANGUAGES
+    .map((language) => language.code)
+    .filter((code) => code !== 'ru' && code !== 'en')];
+  const targetOrder = targetCodes
+    .map((code) => byCode.get(code)!)
+    .filter(Boolean);
+
+  for (const select of root.querySelectorAll<HTMLSelectElement>('[data-language-source]')) {
+    const options = sourceOrder.map((language) => new Option(language.name, language.code));
+    options.push(new Option('Авто · язык текста', 'auto'));
+    select.replaceChildren(...options);
+  }
+  for (const select of root.querySelectorAll<HTMLSelectElement>('[data-language-target]')) {
+    const prefix = select.dataset.languageTarget === 'page' ? 'На ' : '';
+    select.replaceChildren(...targetOrder.map((language) => new Option(
+      `${prefix}${prefix ? language.toName : language.name}`,
+      language.code,
+    )));
+  }
+  for (const select of root.querySelectorAll<HTMLSelectElement>('[data-language-ocr]')) {
+    select.replaceChildren(
+      new Option('Авто · английский + русский', 'auto'),
+      ...OCR_LANGUAGES.map((language) => new Option(language.name, language.code)),
+    );
+  }
+}
 
 const brandIcon = `
   <svg viewBox="0 0 48 48" aria-hidden="true">
@@ -33,19 +66,11 @@ export function mountPopupShell(root: HTMLElement): void {
         <section id="panel-translate" class="view" data-view="translate" role="tabpanel" aria-labelledby="tab-translate">
           <div class="language-row">
             <label>Исходный язык
-              <select data-control="source-mode">
-                <option value="en">Английский</option>
-                <option value="ru">Русский</option>
-                <option value="uk">Украинский</option>
-                <option value="de">Немецкий</option>
-                <option value="fr">Французский</option>
-                <option value="es">Испанский</option>
-                <option value="auto">Авто · 6 языков</option>
-              </select>
+              <select data-control="source-mode" data-language-source></select>
             </label>
             <span class="language-arrow">→</span>
             <label>Перевод
-              <select data-control="target-language"><option value="ru">Русский</option><option value="en">Английский</option></select>
+              <select data-control="target-language" data-language-target></select>
             </label>
           </div>
 
@@ -77,7 +102,7 @@ export function mountPopupShell(root: HTMLElement): void {
             <div class="result-divider"></div>
             <p class="result-translation" data-result-translation></p>
             <section class="result-variants" data-result-variants aria-label="Варианты перевода" hidden>
-              <div class="result-variants__head"><span>Другие значения</span><small>локальный словарь</small></div>
+              <div class="result-variants__head"><span>Другие значения</span><small>без ранжирования по контексту</small></div>
               <div class="result-variants__list" data-result-variants-list></div>
             </section>
             <div class="result-actions">
@@ -91,7 +116,7 @@ export function mountPopupShell(root: HTMLElement): void {
           <section class="page-tools">
             <div><span class="section-kicker">Вся страница</span><p data-page-status aria-live="polite">Переведу основной текст, сохранив кнопки и ссылки.</p></div>
             <div class="page-actions">
-              <label class="page-target"><span>Язык страницы</span><select data-control="page-target-language" aria-label="Перевести страницу на"><option value="ru">На русский</option><option value="en">На английский</option></select></label>
+              <label class="page-target"><span>Язык страницы</span><select data-control="page-target-language" data-language-target="page" aria-label="Перевести страницу на"></select></label>
               <button class="button button--soft" type="button" data-action="translate-page">Перевести страницу</button>
               <button class="icon-button" type="button" aria-label="Вернуть оригинал" title="Вернуть оригинал" data-action="restore-page">↶</button>
             </div>
@@ -119,11 +144,14 @@ export function mountPopupShell(root: HTMLElement): void {
         <section id="panel-settings" class="view" data-view="settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
           <div class="section-head"><div><span class="section-kicker">Под себя</span><h2>Настройки</h2></div></div>
           <div class="settings-group">
-            <label class="setting-row setting-row--stack"><span><strong>Исходный язык</strong><small>Для текста, выделения и OCR области</small></span>
-              <select data-control="settings-source-mode"><option value="en">Английский</option><option value="ru">Русский</option><option value="uk">Украинский</option><option value="de">Немецкий</option><option value="fr">Французский</option><option value="es">Испанский</option><option value="auto">Авто · 6 языков</option></select>
+            <label class="setting-row setting-row--stack"><span><strong>Исходный язык</strong><small>Для текста и выделения</small></span>
+              <select data-control="settings-source-mode" data-language-source></select>
             </label>
-            <label class="setting-row setting-row--stack"><span><strong>Язык перевода</strong><small>Русский или английский</small></span>
-              <select data-control="settings-target-language"><option value="ru">Русский</option><option value="en">Английский</option></select>
+            <label class="setting-row setting-row--stack"><span><strong>Язык перевода</strong><small>Любой поддерживаемый язык Chrome</small></span>
+              <select data-control="settings-target-language" data-language-target></select>
+            </label>
+            <label class="setting-row setting-row--stack"><span><strong>Язык OCR</strong><small>Для текста на изображениях; авто загружает только EN + RU</small></span>
+              <select data-control="settings-ocr-mode" data-language-ocr></select>
             </label>
             <label class="setting-row"><span><strong>Сохранять историю</strong><small>Ручные, выделенные и OCR-переводы</small></span><input class="switch" type="checkbox" aria-label="Сохранять историю" data-control="save-history"></label>
             <label class="setting-row"><span><strong>Кнопка у выделения</strong><small>Показывать маленького помощника на страницах</small></span><input class="switch" type="checkbox" aria-label="Показывать кнопку возле выделения" data-control="selection-button"></label>
@@ -169,6 +197,7 @@ export function mountPopupShell(root: HTMLElement): void {
       </form>
     </dialog>
     <div class="toast" data-toast role="status" aria-live="polite" hidden></div>`;
+  populateLanguageOptions(root);
 }
 
 export function activateTab(root: ParentNode, tab: PopupTab): void {

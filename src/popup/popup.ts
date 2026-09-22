@@ -5,9 +5,10 @@ import { createBackup, DEFAULT_STATE, STORAGE_KEY } from '../core/storage';
 import { getStorageClient } from '../core/storage-client';
 import { persistTranslationHistory } from '../core/translation-history';
 import { ChromeTranslator } from '../core/translator';
-import { sourceCandidates } from '../core/languages';
+import { languageDefinition } from '../core/languages';
+import { beginTranslationFromUserActivation, type TranslationAttempt } from '../core/user-activated-translation';
 import { createRequestId, type PageStatus, type RuntimeResponse } from '../shared/messages';
-import type { DictionaryEntry, DictionaryVariant, ExtensionState, HistoryEntry, SourceMode, TargetLanguage, TextScale, TranslationResult } from '../shared/types';
+import type { DictionaryEntry, DictionaryVariant, ExtensionState, HistoryEntry, OcrMode, SourceMode, TargetLanguage, TextScale, TranslationResult } from '../shared/types';
 import { activateTab, mountPopupShell, type PopupTab } from './ui';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
@@ -31,6 +32,7 @@ let revealedReviewId: string | undefined;
 let reviewBusy = false;
 let stateRefreshVersion = 0;
 let languageSettingsOperation = 0;
+let pendingTranslationActivation: Extract<TranslationAttempt, { status: 'needs-activation' }> & { key: string } | undefined;
 
 const sourceText = required<HTMLTextAreaElement>('#source-text');
 const charCount = required<HTMLElement>('[data-char-count]');
@@ -40,6 +42,7 @@ const sourceMode = required<HTMLSelectElement>('[data-control="source-mode"]');
 const settingsSourceMode = required<HTMLSelectElement>('[data-control="settings-source-mode"]');
 const targetLanguage = required<HTMLSelectElement>('[data-control="target-language"]');
 const settingsTargetLanguage = required<HTMLSelectElement>('[data-control="settings-target-language"]');
+const settingsOcrMode = required<HTMLSelectElement>('[data-control="settings-ocr-mode"]');
 const pageTargetLanguage = required<HTMLSelectElement>('[data-control="page-target-language"]');
 const saveHistory = required<HTMLInputElement>('[data-control="save-history"]');
 const selectionButtonSetting = required<HTMLInputElement>('[data-control="selection-button"]');
@@ -92,6 +95,7 @@ function syncSettingsControls(): void {
   targetLanguage.value = state.settings.targetLanguage;
   settingsTargetLanguage.value = state.settings.targetLanguage;
   pageTargetLanguage.value = state.settings.pageTargetLanguage;
+  settingsOcrMode.value = state.settings.ocrMode;
   saveHistory.checked = state.settings.saveHistory;
   selectionButtonSetting.checked = state.settings.showSelectionButton;
   textScale.value = String(state.settings.textScale);
@@ -371,6 +375,10 @@ async function updateTargetLanguage(target: TargetLanguage): Promise<void> {
 }
 
 async function persistLanguageSettings(mode: SourceMode, target: TargetLanguage): Promise<void> {
+  if (pendingTranslationActivation) {
+    pendingTranslationActivation = undefined;
+    setBusy(false);
+  }
   const operation = ++languageSettingsOperation;
   stateRefreshVersion += 1;
   state = {
@@ -429,7 +437,12 @@ async function renderAlternativeVariants(result: TranslationResult): Promise<voi
   resultVariants.hidden = true;
   resultVariantsList.replaceChildren();
   if (result.alreadyTarget) return;
-  const variants = await lookupAlternativeVariants(result.original, result.translation, result.sourceLanguage);
+  const variants = await lookupAlternativeVariants(
+    result.original,
+    result.translation,
+    result.sourceLanguage,
+    result.targetLanguage,
+  );
   if (latestResult !== result || !variants.length) return;
   resultVariantsList.append(...variants.map((variant) => createVariantButton(result, variant)));
   resultVariants.hidden = false;
@@ -449,23 +462,14 @@ async function updateEngineStatus(): Promise<void> {
   const mode = sourceMode.value as SourceMode;
   const target = targetLanguage.value as TargetLanguage;
   const operation = ++engineStatusOperation;
-  const availabilityValues = mode === 'auto'
-    ? await Promise.all(sourceCandidates(target).map((source) => engine.getAvailability(source, target)))
-    : [await engine.getAvailability(mode, target)];
-  const availability = availabilityValues.includes('unavailable')
-    ? 'unavailable'
-    : availabilityValues.includes('downloadable')
-      ? 'downloadable'
-      : availabilityValues.includes('downloading')
-        ? 'downloading'
-        : 'available';
+  const availability = mode === 'auto' ? 'available' : await engine.getAvailability(mode, target);
   if (operation !== engineStatusOperation || sourceMode.value !== mode || targetLanguage.value !== target) return;
   enginePill.dataset.state = availability;
-  const compact = {
+  const compact = mode === 'auto' ? 'По запросу' : {
     available: 'Готов', downloadable: 'Нужна загрузка', downloading: 'Загрузка', unavailable: 'Недоступен',
   }[availability];
   const detail = {
-    available: mode === 'auto' ? 'Обе языковые пары готовы на устройстве.' : 'Языковой пакет готов. Перевод выполняется на устройстве.',
+    available: mode === 'auto' ? 'Язык определится локально; будет подготовлена только нужная пара.' : 'Языковой пакет готов. Перевод выполняется на устройстве.',
     downloadable: 'Нажмите «Подготовить», чтобы бесплатно скачать языковой пакет.',
     downloading: 'Chrome загружает языковой пакет.',
     unavailable: 'Нужен настольный Google Chrome 138 или новее.',
@@ -542,6 +546,10 @@ root.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
 });
 
 sourceText.addEventListener('input', () => {
+  if (pendingTranslationActivation) {
+    pendingTranslationActivation = undefined;
+    setBusy(false);
+  }
   charCount.textContent = `${sourceText.value.length.toLocaleString('ru-RU')} / 10 000`;
 });
 sourceText.addEventListener('keydown', (event) => {
@@ -564,23 +572,35 @@ translateForm.addEventListener('submit', (event) => {
   const submittedMode = sourceMode.value as SourceMode;
   const operation = ++translationOperation;
   translationBusy = true;
-  // Start creation synchronously inside submit activation.
   const submittedTarget = targetLanguage.value as TargetLanguage;
-  const preparation = engine.prepareForMode(submittedMode, {
-    onProgress(percent) {
+  const key = JSON.stringify([text, submittedMode, submittedTarget]);
+  const callbacks = {
+    onProgress(percent: number) {
       if (operation !== translationOperation) return;
       setBusy(true, `Загрузка ${percent}%`);
       engineDetail.textContent = `Загружаю языковой пакет: ${percent}%`;
     },
-  }, submittedTarget);
+  };
+  const activatedResult = pendingTranslationActivation?.key === key
+    ? pendingTranslationActivation.activate(callbacks)
+    : undefined;
+  if (activatedResult) pendingTranslationActivation = undefined;
+  const attemptPromise = activatedResult
+    ? activatedResult.then((result) => ({ status: 'translated' as const, result }))
+    : beginTranslationFromUserActivation(engine, text, submittedMode, submittedTarget, callbacks);
   void (async () => {
     translateError.hidden = true;
     resultCard.hidden = true;
     setBusy(true);
     try {
-      await preparation;
-      const result = await engine.translate(text, submittedMode, {}, submittedTarget);
+      const attempt = await attemptPromise;
       if (operation !== translationOperation) return;
+      if (attempt.status === 'needs-activation') {
+        pendingTranslationActivation = { ...attempt, key };
+        engineDetail.textContent = `Определён язык: ${languageDefinition(attempt.sourceLanguage).name}. Нужен один клик для загрузки этой пары.`;
+        return;
+      }
+      const { result } = attempt;
       renderTranslationResult(result);
       if (!result.alreadyTarget) {
         const historyResult = await persistTranslationHistory(() => repository.addHistory({
@@ -605,7 +625,7 @@ translateForm.addEventListener('submit', (event) => {
     } finally {
       if (operation === translationOperation) {
         translationBusy = false;
-        setBusy(false);
+        setBusy(false, pendingTranslationActivation?.key === key ? 'Подготовить и перевести' : 'Перевести');
       }
     }
   })();
@@ -623,6 +643,12 @@ targetLanguage.addEventListener('change', () => void updateTargetLanguage(target
 settingsTargetLanguage.addEventListener('change', () => void updateTargetLanguage(settingsTargetLanguage.value as TargetLanguage)
   .then(updateEngineStatus)
   .catch((error) => showToast(error instanceof Error ? error.message : 'Не удалось сохранить язык перевода')));
+settingsOcrMode.addEventListener('change', () => {
+  const ocrMode = settingsOcrMode.value as OcrMode;
+  void repository.updateSettings({ ocrMode })
+    .then(refreshState)
+    .catch(() => { showToast('Не удалось сохранить язык OCR'); void refreshState().catch(() => undefined); });
+});
 saveHistory.addEventListener('change', () => void repository.updateSettings({ saveHistory: saveHistory.checked })
   .then(refreshState)
   .catch(() => {
@@ -703,7 +729,7 @@ importFile.addEventListener('change', () => void (async () => {
 
 required<HTMLButtonElement>('[data-action="translate-page"]').addEventListener('click', () => {
   void sendToActiveTab<PageStatus>({
-    type: 'TRANSLATE_PAGE', requestId: createRequestId(), targetLanguage: pageTargetLanguage.value === 'en' ? 'en' : 'ru',
+    type: 'TRANSLATE_PAGE', requestId: createRequestId(), targetLanguage: pageTargetLanguage.value as TargetLanguage,
   }).then((response) => {
     if (!response.ok || !response.data) throw new Error(response.error ?? 'Страница не ответила.');
     renderPageStatus(response.data);
@@ -714,7 +740,7 @@ required<HTMLButtonElement>('[data-action="translate-page"]').addEventListener('
 });
 
 pageTargetLanguage.addEventListener('change', () => {
-  const selected = pageTargetLanguage.value === 'en' ? 'en' : 'ru';
+  const selected = pageTargetLanguage.value as TargetLanguage;
   void repository.updateSettings({ pageTargetLanguage: selected })
     .then(() => { state.settings.pageTargetLanguage = selected; showToast('Язык страницы сохранён'); })
     .catch((error) => { pageTargetLanguage.value = state.settings.pageTargetLanguage; showToast(error instanceof Error ? error.message : 'Не удалось сохранить настройку'); });

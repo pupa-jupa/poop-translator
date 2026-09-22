@@ -6,10 +6,10 @@
     <title>PDF · poop translator</title>
     <script type="module" crossorigin src="/assets/pdf.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-B5Qt9EMX.js">
-    <link rel="modulepreload" crossorigin href="/assets/languages-D6_hPaBp.js">
-    <link rel="modulepreload" crossorigin href="/assets/translator-Dq9POm8-.js">
-    <link rel="modulepreload" crossorigin href="/assets/tesseract-engine-BEoqhUa3.js">
-    <link rel="stylesheet" crossorigin href="/assets/pdf-BRTcjH-z.css">
+    <link rel="modulepreload" crossorigin href="/assets/languages-B0I-592T.js">
+    <link rel="modulepreload" crossorigin href="/assets/user-activated-translation-BZ79dQV2.js">
+    <link rel="modulepreload" crossorigin href="/assets/tesseract-engine-Dd58A1_l.js">
+    <link rel="stylesheet" crossorigin href="/assets/pdf-Uu6MYkQq.css">
   </head>
   <body>
     <main class="pdf-app">
@@ -21,9 +21,9 @@
       <section class="upload-card" data-drop-zone>
         <input id="pdf-file" type="file" accept="application/pdf,.pdf" hidden />
         <div class="upload-icon" aria-hidden="true">PDF</div>
-        <div><h2>Выберите PDF</h2><p>Текстовый документ или скан · до 20 МБ и 50 страниц</p></div>
+        <div><h2>Выберите PDF</h2><p>Текстовый документ или скан · предупреждение после 20 МБ или 50 страниц</p></div>
         <label>Язык скана
-          <select data-ocr-language aria-label="Язык OCR для страниц-сканов"><option value="auto">Авто EN/RU</option><option value="eng">Английский</option><option value="rus">Русский</option><option value="ukr">Украинский</option><option value="deu">Немецкий</option><option value="fra">Французский</option><option value="spa">Испанский</option></select>
+          <select data-ocr-language aria-label="Язык OCR для страниц-сканов"></select>
         </label>
         <button class="button button--accent" type="button" data-action="choose-file">Выбрать файл</button>
       </section>
@@ -38,11 +38,23 @@
             <select data-target-language aria-label="Язык перевода PDF"><option value="ru">На русский</option><option value="en">На английский</option></select>
           </label>
           <button class="button button--accent" type="button" data-action="translate">Перевести</button>
+          <button class="button button--accent" type="button" data-action="prepare-pair" hidden>Подготовить и перевести</button>
           <button class="button button--soft" type="button" data-action="cancel" hidden>Отменить</button>
           <button class="button button--soft" type="button" data-action="download" hidden>Скачать TXT</button>
         </div>
         <div class="pages" data-pages></div>
       </section>
+      <dialog class="warning-dialog" data-pdf-warning>
+        <form method="dialog">
+          <h2>Большой PDF</h2>
+          <p data-pdf-warning-text></p>
+          <div class="warning-dialog__actions">
+            <button class="button button--soft" value="cancel">Отмена</button>
+            <button class="button button--accent" value="continue">Продолжить</button>
+          </div>
+        </form>
+      </dialog>
     </main>
+
   </body>
 </html>

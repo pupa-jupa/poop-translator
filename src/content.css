@@ -96,7 +96,8 @@ button { font: inherit; }
 .pt-selection-button:hover { transform: translateY(-2px) rotate(-2deg); }
 .pt-selection-button:focus-visible,
 .pt-button:focus-visible,
-.pt-icon-button:focus-visible { outline: 3px solid rgba(198, 179, 255, .48); outline-offset: 3px; }
+.pt-icon-button:focus-visible,
+.pt-card-drag:focus-visible { outline: 3px solid rgba(255, 208, 229, .75); outline-offset: 2px; }
 
 .pt-mini-poop { width: 23px; height: 23px; display: block; }
 
@@ -121,6 +122,9 @@ button { font: inherit; }
 .pt-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .pt-card-mark { width: 28px; height: 28px; border-radius: 10px; display: grid; place-items: center; background: rgba(242, 167, 202, .14); }
 .pt-card-title { flex: 1; font-size: 16px; font-weight: 800; letter-spacing: .01em; }
+.pt-card-drag { width: 32px; height: 30px; border: 0; border-radius: 10px; color: var(--pt-muted); background: transparent; cursor: grab; touch-action: none; font-size: 20px; line-height: 1; }
+.pt-card-drag:hover { color: var(--pt-text); background: rgba(255, 255, 255, .07); }
+.pt-card-drag[data-dragging="true"] { cursor: grabbing; background: rgba(255, 171, 209, .18); }
 .pt-icon-button { border: 0; background: transparent; color: var(--pt-muted); width: 30px; height: 30px; border-radius: 10px; cursor: pointer; }
 .pt-icon-button:hover { background: rgba(255, 255, 255, .07); color: var(--pt-text); }
 .pt-label { margin: 0 0 6px; color: var(--pt-muted); font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }

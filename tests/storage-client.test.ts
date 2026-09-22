@@ -50,8 +50,11 @@ describe('StorageClient', () => {
       payload: { textScale: 999 },
     })).toBe(false);
     expect(isStorageMutationMessage({
-      ...envelope, operation: 'updateSettings', payload: { pageTargetLanguage: 'fr' },
+      ...envelope, operation: 'updateSettings', payload: { pageTargetLanguage: 'xx' },
     })).toBe(false);
+    expect(isStorageMutationMessage({
+      ...envelope, operation: 'updateSettings', payload: { pageTargetLanguage: 'fr', ocrMode: 'jpn' },
+    })).toBe(true);
     expect(isStorageMutationMessage({
       ...envelope, operation: 'updateSettings', payload: { pageTargetLanguage: 'en' },
     })).toBe(true);

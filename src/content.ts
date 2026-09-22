@@ -1,14 +1,14 @@
 import contentStyles from './content.css?inline';
 import { lookupAlternativeVariants } from './core/dictionary-client';
-import { placeFloatingCard } from './core/floating-card';
+import { clampFloatingCardPosition, moveFloatingCardByKey, placeFloatingCard } from './core/floating-card';
 import { PageTranslationSession, findMainContent } from './core/page-translation';
 import { normalizeRegionSelection } from './core/region-capture';
 import { STORAGE_KEY } from './core/storage';
 import { getStorageClient } from './core/storage-client';
 import { persistTranslationHistory, type HistoryPersistenceResult } from './core/translation-history';
 import { ChromeTranslator } from './core/translator';
-import { translateFromUserActivation } from './core/user-activated-translation';
-import { ocrLanguagesForMode } from './core/languages';
+import { beginTranslationFromUserActivation, type TranslationAttempt } from './core/user-activated-translation';
+import { languageDefinition, ocrLanguagesForMode } from './core/languages';
 import {
   createRequestId,
   isContentRequest,
@@ -31,7 +31,10 @@ import type {
 
 const engine = new ChromeTranslator();
 const repository = getStorageClient();
-let settings: Settings = { sourceMode: 'en', targetLanguage: 'ru', pageTargetLanguage: 'ru', saveHistory: true, showSelectionButton: true, textScale: 115 };
+let settings: Settings = {
+  sourceMode: 'en', targetLanguage: 'ru', pageTargetLanguage: 'ru', ocrMode: 'auto',
+  saveHistory: true, showSelectionButton: true, textScale: 115,
+};
 let host: HTMLDivElement | undefined;
 let layer: HTMLDivElement | undefined;
 let selectionButton: HTMLButtonElement | undefined;
@@ -46,6 +49,15 @@ let pageStatus: PageStatus = { state: 'idle', completed: 0, total: 0 };
 let pageOperationId = 0;
 let regionOverlay: HTMLDivElement | undefined;
 let regionPreviousFocus: HTMLElement | undefined;
+
+interface CardPositionState {
+  point: { x: number; y: number };
+  userPositioned: boolean;
+  anchor?: DOMRect;
+  pointerId?: number;
+  handle: HTMLButtonElement;
+}
+const cardPositions = new WeakMap<HTMLElement, CardPositionState>();
 
 type PreparationOutcome = { ok: true } | { ok: false; error: unknown };
 interface RegionOperation {
@@ -85,6 +97,19 @@ function clamp(value: number, min: number, max: number): number {
 
 function positionCardElement(element: HTMLElement, anchor?: DOMRect): void {
   const measured = element.getBoundingClientRect();
+  const state = cardPositions.get(element);
+  if (anchor && state) state.anchor = anchor;
+  if (state?.userPositioned) {
+    const point = clampFloatingCardPosition(
+      state.point,
+      { width: measured.width, height: measured.height },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    state.point = point;
+    element.style.setProperty('--pt-left', `${point.x}px`);
+    element.style.setProperty('--pt-top', `${point.y}px`);
+    return;
+  }
   const point = placeFloatingCard({
     anchor,
     cardWidth: measured.width,
@@ -94,6 +119,7 @@ function positionCardElement(element: HTMLElement, anchor?: DOMRect): void {
   });
   element.style.setProperty('--pt-left', `${point.left}px`);
   element.style.setProperty('--pt-top', `${point.top}px`);
+  if (state) state.point = { x: point.left, y: point.top };
 }
 
 function removeSelectionButton(): void {
@@ -103,12 +129,22 @@ function removeSelectionButton(): void {
 
 function closeCard(): void {
   const closingCard = card;
+  if (closingCard) {
+    const state = cardPositions.get(closingCard);
+    if (state?.pointerId !== undefined && state.handle.hasPointerCapture(state.pointerId)) {
+      state.handle.releasePointerCapture(state.pointerId);
+    }
+  }
   card?.remove();
   card = undefined;
   if (closingCard && regionOperation?.view?.element === closingCard) regionOperation = undefined;
   if (cardPreviousFocus?.isConnected) cardPreviousFocus.focus({ preventScroll: true });
   cardPreviousFocus = undefined;
 }
+
+window.addEventListener('resize', () => {
+  if (card?.isConnected) positionCardElement(card, cardPositions.get(card)?.anchor);
+});
 
 function showToast(message: string): void {
   const toast = document.createElement('div');
@@ -177,6 +213,7 @@ function cardShell(original: string, rect?: DOMRect): {
     <div class="pt-card-header">
       <span class="pt-card-mark">${poopSvg}</span>
       <span class="pt-card-title">poop translator</span>
+      <button class="pt-card-drag" type="button" aria-label="Переместить окно перевода" title="Переместить окно">⠿</button>
       <button class="pt-icon-button" type="button" aria-label="Закрыть">✕</button>
     </div>
     <p class="pt-label">Оригинал</p>
@@ -186,12 +223,60 @@ function cardShell(original: string, rect?: DOMRect): {
     <div class="pt-status" role="status" aria-live="polite"><span class="pt-spinner"></span><span>Запускаю локальный перевод…</span></div>
     <p class="pt-copy pt-translation" hidden></p>
     <section class="pt-variants" aria-label="Варианты перевода" hidden>
-      <div class="pt-variants__head"><span>Другие значения</span><small>локальный словарь</small></div>
+      <div class="pt-variants__head"><span>Другие значения</span><small>без ранжирования по контексту</small></div>
       <div class="pt-variants__list"></div>
     </section>
     <div class="pt-actions"></div>`;
   element.querySelector<HTMLParagraphElement>('.pt-original')!.textContent = original;
   element.querySelector<HTMLButtonElement>('.pt-icon-button')!.addEventListener('click', closeCard);
+  const drag = element.querySelector<HTMLButtonElement>('.pt-card-drag')!;
+  const positionState: CardPositionState = { point: { x: 12, y: 12 }, userPositioned: false, handle: drag };
+  cardPositions.set(element, positionState);
+  let pointerOffset = { x: 0, y: 0 };
+  drag.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const bounds = element.getBoundingClientRect();
+    positionState.userPositioned = true;
+    positionState.pointerId = event.pointerId;
+    positionState.point = { x: bounds.left, y: bounds.top };
+    pointerOffset = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    drag.setPointerCapture(event.pointerId);
+    drag.dataset.dragging = 'true';
+    event.preventDefault();
+  });
+  drag.addEventListener('pointermove', (event) => {
+    if (positionState.pointerId !== event.pointerId) return;
+    const bounds = element.getBoundingClientRect();
+    positionState.point = clampFloatingCardPosition(
+      { x: event.clientX - pointerOffset.x, y: event.clientY - pointerOffset.y },
+      { width: bounds.width, height: bounds.height },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    positionCardElement(element);
+  });
+  const finishDrag = (event: PointerEvent) => {
+    if (positionState.pointerId !== event.pointerId) return;
+    if (drag.hasPointerCapture(event.pointerId)) drag.releasePointerCapture(event.pointerId);
+    positionState.pointerId = undefined;
+    delete drag.dataset.dragging;
+  };
+  drag.addEventListener('pointerup', finishDrag);
+  drag.addEventListener('pointercancel', finishDrag);
+  drag.addEventListener('keydown', (event) => {
+    const bounds = element.getBoundingClientRect();
+    const next = moveFloatingCardByKey(
+      positionState.point,
+      event.key,
+      event.shiftKey,
+      { width: bounds.width, height: bounds.height },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    if (!next) return;
+    event.preventDefault();
+    positionState.userPositioned = true;
+    positionState.point = next;
+    positionCardElement(element);
+  });
   element.addEventListener('pointerdown', (event) => event.stopPropagation());
   ensureLayer().append(element);
   card = element;
@@ -250,7 +335,12 @@ function createVariantButton(result: TranslationResult, variant: DictionaryVaria
 
 async function showAlternativeVariants(view: CardView, result: TranslationResult): Promise<void> {
   const generation = ++view.variantGeneration;
-  const variants = await lookupAlternativeVariants(result.original, result.translation, result.sourceLanguage);
+  const variants = await lookupAlternativeVariants(
+    result.original,
+    result.translation,
+    result.sourceLanguage,
+    result.targetLanguage,
+  );
   if (!view.element.isConnected || card !== view.element || view.variantGeneration !== generation || !variants.length) return;
   view.variantsList.append(...variants.map((variant) => createVariantButton(result, variant)));
   view.variants.hidden = false;
@@ -285,6 +375,43 @@ async function showTranslationCard(
   regionOperation = undefined;
   const view = cardShell(text, rect);
 
+  const presentResult = async (result: TranslationResult) => {
+    if (!view.element.isConnected) return;
+    view.status.hidden = true;
+    view.translation.hidden = false;
+    view.translation.textContent = result.alreadyTarget ? 'Текст уже на выбранном языке' : result.translation;
+    const copy = makeButton('Копировать');
+    copy.addEventListener('click', () => {
+      void navigator.clipboard.writeText(result.translation)
+        .then(() => showToast('Скопировано'))
+        .catch(() => showToast('Не удалось скопировать'));
+    });
+    const add = makeButton('В словарь', 'pt-button pt-button--primary');
+    add.addEventListener('click', () => {
+      add.disabled = true;
+      void repository.addDictionaryEntry({ original: result.original, translation: result.translation })
+        .then((added) => { add.textContent = added.added ? 'Добавлено ✓' : 'Уже в словаре'; })
+        .catch(() => { add.disabled = false; showToast('Не удалось добавить перевод в словарь'); });
+    });
+    view.actions.replaceChildren();
+    if (!result.alreadyTarget) view.actions.append(copy, add);
+    positionCardElement(view.element, view.anchor);
+    void showAlternativeVariants(view, result).catch(() => undefined);
+    const historyResult = await saveSuccessfulTranslation(result, source, requestId);
+    if (historyResult.status === 'failed') showToast('Перевод готов, историю сохранить не удалось');
+  };
+
+  const showFailure = (error: unknown) => {
+    if (!view.element.isConnected) return;
+    view.status.hidden = false;
+    view.status.dataset.kind = 'error';
+    view.status.replaceChildren(document.createTextNode(error instanceof Error ? error.message : 'Не удалось выполнить перевод.'));
+    const retry = makeButton('Повторить', 'pt-button pt-button--primary');
+    retry.addEventListener('click', () => void run());
+    view.actions.replaceChildren(retry);
+    positionCardElement(view.element, view.anchor);
+  };
+
   const run = async () => {
     view.status.hidden = false;
     view.status.dataset.kind = '';
@@ -297,50 +424,33 @@ async function showTranslationCard(
       if (label) label.textContent = 'Chrome готовит языковую модель на устройстве…';
     }, 4_000);
     try {
-      const result = await translateFromUserActivation(engine, text, sourceMode, {
+      const attempt = await beginTranslationFromUserActivation(engine, text, sourceMode, targetLanguage, {
         onProgress(percent) {
           window.clearTimeout(slowHint);
           const label = view.status.querySelector('span:last-child');
           if (label) label.textContent = `Загружаю языковой пакет: ${percent}%`;
         },
-      }, targetLanguage);
-      if (!view.element.isConnected) return;
-      view.status.hidden = true;
-      view.translation.hidden = false;
-      view.translation.textContent = result.alreadyTarget ? 'Текст уже на выбранном языке' : result.translation;
-      const copy = makeButton('Копировать');
-      copy.addEventListener('click', () => {
-        void navigator.clipboard.writeText(result.translation)
-          .then(() => showToast('Скопировано'))
-          .catch(() => showToast('Не удалось скопировать'));
       });
-      const add = makeButton('В словарь', 'pt-button pt-button--primary');
-      add.addEventListener('click', () => {
-        add.disabled = true;
-        void repository.addDictionaryEntry({
-          original: result.original,
-          translation: result.translation,
-        }).then((added) => {
-          add.textContent = added.added ? 'Добавлено ✓' : 'Уже в словаре';
-        }).catch(() => {
-          add.disabled = false;
-          showToast('Не удалось добавить перевод в словарь');
+      if (!view.element.isConnected) return;
+      if (attempt.status === 'needs-activation') {
+        view.status.dataset.kind = '';
+        view.status.textContent = `Определён язык: ${languageDefinition(attempt.sourceLanguage).name}.`;
+        const activate = makeButton('Подготовить и перевести', 'pt-button pt-button--primary');
+        activate.addEventListener('click', () => {
+          const pending = attempt.activate({
+            onProgress(percent) { view.status.textContent = `Загружаю языковой пакет: ${percent}%`; },
+          });
+          view.status.innerHTML = '<span class="pt-spinner"></span><span>Подготавливаю языковой пакет…</span>';
+          view.actions.replaceChildren();
+          void pending.then(presentResult).catch(showFailure);
         });
-      });
-      if (!result.alreadyTarget) view.actions.append(copy, add);
-      positionCardElement(view.element, view.anchor);
-      void showAlternativeVariants(view, result).catch(() => undefined);
-      const historyResult = await saveSuccessfulTranslation(result, source, requestId);
-      if (historyResult.status === 'failed') showToast('Перевод готов, историю сохранить не удалось');
+        view.actions.replaceChildren(activate);
+        positionCardElement(view.element, view.anchor);
+        return;
+      }
+      await presentResult(attempt.result);
     } catch (error) {
-      if (!view.element.isConnected) return;
-      const message = error instanceof Error ? error.message : 'Не удалось выполнить перевод.';
-      view.status.dataset.kind = 'error';
-      view.status.replaceChildren(document.createTextNode(message));
-      const retry = makeButton('Повторить', 'pt-button pt-button--primary');
-      retry.addEventListener('click', () => void run());
-      view.actions.replaceChildren(retry);
-      positionCardElement(view.element, view.anchor);
+      showFailure(error);
     } finally {
       window.clearTimeout(slowHint);
     }
@@ -431,6 +541,7 @@ async function renderRecognizedTranslation(
   editor: HTMLTextAreaElement,
   preparation: Promise<PreparationOutcome>,
   requestId: string,
+  readyResult?: TranslationResult,
 ): Promise<void> {
   const generation = ++view.translationGeneration;
   const text = editor.value.trim();
@@ -454,7 +565,39 @@ async function renderRecognizedTranslation(
     const prepared = await preparation;
     if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
     if (!prepared.ok) throw prepared.error;
-    result = await engine.translate(text, operation.sourceMode, {}, operation.targetLanguage);
+    if (readyResult) {
+      result = readyResult;
+    } else {
+      const attempt = await beginTranslationFromUserActivation(
+        engine,
+        text,
+        operation.sourceMode,
+        operation.targetLanguage,
+      );
+      if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
+      if (attempt.status === 'needs-activation') {
+        view.status.dataset.kind = '';
+        view.status.textContent = `Определён язык: ${languageDefinition(attempt.sourceLanguage).name}.`;
+        const activate = makeButton('Подготовить и перевести', 'pt-button pt-button--primary');
+        activate.addEventListener('click', () => {
+          const pending = attempt.activate({
+            onProgress(percent) { view.status.textContent = `Загружаю языковой пакет: ${percent}%`; },
+          });
+          void pending.then((translated) => renderRecognizedTranslation(
+            operation, view, editor, Promise.resolve({ ok: true }), requestId, translated,
+          )).catch((error) => showRecognizedTranslationError(
+            operation,
+            view,
+            editor,
+            error instanceof Error ? error.message : 'Не удалось подготовить переводчик.',
+          ));
+        });
+        view.actions.replaceChildren(activate);
+        positionCardElement(view.element);
+        return;
+      }
+      result = attempt.result;
+    }
   } catch (error) {
     if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
     throw error;
@@ -514,7 +657,7 @@ async function recognizeSelectedRegion(
       type: 'CAPTURE_REGION',
       requestId: operation.requestId,
       region,
-      languages: ocrLanguagesForMode(operation.sourceMode),
+      languages: ocrLanguagesForMode(settings.ocrMode),
     };
     const response = await chrome.runtime.sendMessage<RegionCaptureRequest, RuntimeResponse<OcrRecognitionResult>>(request);
     if (regionOperation !== operation) return;
@@ -673,7 +816,7 @@ function showPagePrompt(targetLanguage: PageTargetLanguage): void {
   prompt.className = 'pt-page-prompt';
   prompt.innerHTML = `
     <span class="pt-card-mark">${poopSvg}</span>
-    <div><strong>Перевести страницу на ${targetLanguage === 'ru' ? 'русский' : 'английский'}?</strong><span>Нажатие разрешит Chrome подготовить локальный переводчик.</span></div>
+    <div><strong>Перевести страницу на ${languageDefinition(targetLanguage).toName}?</strong><span>Язык фрагментов определится локально. Для новой пары может потребоваться ещё одно нажатие.</span></div>
     <div class="pt-page-prompt__buttons"></div>`;
   const buttons = prompt.querySelector<HTMLDivElement>('.pt-page-prompt__buttons')!;
   const cancel = makeButton('Не сейчас');
@@ -717,7 +860,14 @@ async function runPageTranslation(
     if (operationId !== pageOperationId || controller.signal.aborted) return;
     const summary = await session.translate(
       findMainContent(),
-      async (text) => engine.translatePageText(text, targetLanguage),
+      async (text) => {
+        const attempt = await beginTranslationFromUserActivation(engine, text, 'auto', targetLanguage);
+        if (controller.signal.aborted || operationId !== pageOperationId) throw new DOMException('Операция отменена', 'AbortError');
+        const result = attempt.status === 'translated'
+          ? attempt.result
+          : await requestPagePairActivation(attempt, operationId, controller.signal);
+        return result.translation;
+      },
       (completed, total) => {
         if (operationId === pageOperationId) setPageStatus({ state: 'translating', completed, total });
       },
@@ -741,6 +891,50 @@ async function runPageTranslation(
     });
     showToast(pageStatus.error ?? 'Не удалось перевести страницу');
   }
+}
+
+function requestPagePairActivation(
+  attempt: Extract<TranslationAttempt, { status: 'needs-activation' }>,
+  operationId: number,
+  signal: AbortSignal,
+): Promise<TranslationResult> {
+  if (signal.aborted) return Promise.reject(new DOMException('Операция отменена', 'AbortError'));
+  return new Promise((resolve, reject) => {
+    const prompt = document.createElement('div');
+    prompt.className = 'pt-page-prompt';
+    const source = languageDefinition(attempt.sourceLanguage).fromName;
+    const target = languageDefinition(attempt.targetLanguage).toName;
+    const label = document.createElement('div');
+    const heading = document.createElement('strong');
+    heading.textContent = `Перевод с ${source} на ${target}`;
+    const explanation = document.createElement('span');
+    explanation.textContent = 'Для загрузки этой языковой пары нажмите кнопку.';
+    label.append(heading, explanation);
+    const buttons = document.createElement('div');
+    buttons.className = 'pt-page-prompt__buttons';
+    const cancel = makeButton('Отмена');
+    const start = makeButton('Подготовить и перевести', 'pt-button pt-button--primary');
+    const cleanup = () => {
+      signal.removeEventListener('abort', onAbort);
+      if (pagePrompt === prompt) dismissPagePrompt();
+    };
+    const onAbort = () => { cleanup(); reject(new DOMException('Операция отменена', 'AbortError')); };
+    signal.addEventListener('abort', onAbort, { once: true });
+    cancel.addEventListener('click', () => { restorePage(); onAbort(); });
+    start.addEventListener('click', () => {
+      if (signal.aborted || operationId !== pageOperationId) { onAbort(); return; }
+      const pending = attempt.activate();
+      cleanup();
+      setPageStatus({ state: 'translating', completed: pageStatus.completed, total: pageStatus.total });
+      void pending.then(resolve, reject);
+    });
+    buttons.append(cancel, start);
+    prompt.append(label, buttons);
+    ensureLayer().append(prompt);
+    pagePrompt = prompt;
+    setPageStatus({ state: 'awaiting-activation', completed: pageStatus.completed, total: pageStatus.total });
+    start.focus({ preventScroll: true });
+  });
 }
 
 function restorePage(): PageStatus {

@@ -35,7 +35,7 @@ describe('StorageRepository', () => {
       dictionary: [{ id: 'd', original: 'cat', translation: 'кот', note: '', createdAt: 4, updatedAt: 5 }],
     };
     const state = await new StorageRepository(storage).loadState();
-    expect(state.schemaVersion).toBe(3);
+    expect(state.schemaVersion).toBe(4);
     expect(state.history[0]?.requestId).toBe('r');
     expect(state.dictionary[0]?.id).toBe('d');
     expect(state.review).toEqual([]);
@@ -130,7 +130,7 @@ describe('StorageRepository', () => {
     expect(state.dictionary).toHaveLength(2);
     expect(state.review.find((item) => item.dictionaryId === entry.id)?.lastReviewedAt).toBe(2_000);
     expect(state.review.find((item) => item.dictionaryId === 'backup-dog')?.dueAt).toBe(900);
-    expect(createBackup(state).version).toBe(3);
+    expect(createBackup(state).version).toBe(4);
   });
 
   it('remaps imported dictionary IDs that conflict with a different local pair', async () => {
@@ -139,6 +139,7 @@ describe('StorageRepository', () => {
     const { entry } = await repository.addDictionaryEntry({ original: 'cat', translation: 'кот' });
     const backup = { format: 'poop-translator-backup', version: 3, data: {
       ...DEFAULT_STATE,
+      schemaVersion: 3,
       dictionary: [{ ...entry, original: 'dog', translation: 'собака' }],
       review: [{ dictionaryId: entry.id, dueAt: 900, lastReviewedAt: 100, streak: 1 }],
     } };
@@ -192,6 +193,28 @@ describe('StorageRepository', () => {
     expect((await repository.loadState()).settings).toMatchObject({ sourceMode: 'de', targetLanguage: 'ru' });
     await repository.updateSettings({ sourceMode: 'ru', targetLanguage: 'ru' });
     expect((await repository.loadState()).settings).toMatchObject({ sourceMode: 'ru', targetLanguage: 'en' });
+  });
+
+  it('migrates v3 to v4 with a separate OCR mode and preserves expanded targets', async () => {
+    const storage = new MemoryStorage();
+    storage.data[STORAGE_KEY] = {
+      schemaVersion: 3,
+      settings: {
+        sourceMode: 'ja', targetLanguage: 'ko', pageTargetLanguage: 'zh-Hant',
+        saveHistory: true, showSelectionButton: true, textScale: 115,
+      },
+      history: [], dictionary: [], review: [],
+    };
+
+    const state = await new StorageRepository(storage).loadState();
+
+    expect(state).toMatchObject({
+      schemaVersion: 4,
+      settings: {
+        sourceMode: 'ja', targetLanguage: 'ko', pageTargetLanguage: 'zh-Hant', ocrMode: 'auto',
+      },
+    });
+    expect(createBackup(state)).toMatchObject({ version: 4, data: { schemaVersion: 4 } });
   });
 
   it('does not persist translations when history is disabled', async () => {

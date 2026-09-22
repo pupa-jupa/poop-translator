@@ -5,6 +5,7 @@ import type { OcrLanguage, OcrRecognitionResult } from '../shared/types';
 let activeWorker: Worker | undefined;
 let activeLanguages = '';
 let pendingWorker: Promise<Worker> | undefined;
+let recognitionTail: Promise<void> = Promise.resolve();
 
 function prepareLightText(canvas: HTMLCanvasElement): HTMLCanvasElement {
   const prepared = document.createElement('canvas');
@@ -61,7 +62,7 @@ async function getWorker(languages: OcrLanguage[]): Promise<Worker> {
   }
 }
 
-export async function recognizeCanvas(
+async function recognizeCanvasOnce(
   canvas: HTMLCanvasElement,
   languages: OcrLanguage[],
 ): Promise<OcrRecognitionResult> {
@@ -95,4 +96,15 @@ export async function recognizeCanvas(
     activeLanguages = '';
     throw error;
   }
+}
+
+export function recognizeCanvas(
+  canvas: HTMLCanvasElement,
+  languages: OcrLanguage[],
+): Promise<OcrRecognitionResult> {
+  // One OCR job may own the worker at a time. A rapid language switch waits
+  // until recognition finishes before replacing the traineddata in memory.
+  const job = recognitionTail.then(() => recognizeCanvasOnce(canvas, languages));
+  recognitionTail = job.then(() => undefined, () => undefined);
+  return job;
 }

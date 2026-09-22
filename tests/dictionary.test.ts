@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LocalDictionary, selectAlternativeVariants } from '../src/core/dictionary';
+import { lookupAlternativeVariants } from '../src/core/dictionary-client';
 
 describe('LocalDictionary', () => {
   it('normalizes a selected word, loads its shard once and returns distinct meanings', async () => {
@@ -70,5 +71,26 @@ describe('selectAlternativeVariants', () => {
       { translation: 'берег', partOfSpeech: 'n' },
       { translation: 'класть в банк', partOfSpeech: 'v' },
     ]);
+  });
+});
+
+describe('lookupAlternativeVariants', () => {
+  it('returns multiple local meanings only for EN ↔ RU', async () => {
+    const sendMessage = vi.fn(async () => ({ ok: true, data: [
+      { translation: 'банк', partOfSpeech: 'n' },
+      { translation: 'берег', partOfSpeech: 'n' },
+      { translation: 'наклонять', partOfSpeech: 'v' },
+    ] }));
+    vi.stubGlobal('chrome', { runtime: { sendMessage } });
+    try {
+      await expect(lookupAlternativeVariants('bank', 'банк', 'en', 'ru')).resolves.toEqual([
+        { translation: 'берег', partOfSpeech: 'n' },
+        { translation: 'наклонять', partOfSpeech: 'v' },
+      ]);
+      await expect(lookupAlternativeVariants('bank', '銀行', 'en', 'ja')).resolves.toEqual([]);
+      expect(sendMessage).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

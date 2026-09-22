@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChromeTranslator, TranslationEngineError } from '../src/core/translator';
-import { translateFromUserActivation } from '../src/core/user-activated-translation';
+import { beginTranslationFromUserActivation } from '../src/core/user-activated-translation';
 
 function fakeTranslatorApi(options?: { availability?: string; translated?: string }) {
   return {
@@ -75,12 +75,12 @@ describe('ChromeTranslator', () => {
     const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
 
     const preparation = engine.prepareForMode('auto');
-    expect(translatorApi.create).toHaveBeenCalledTimes(2);
+    expect(translatorApi.create).not.toHaveBeenCalled();
     expect(detectorApi.create).toHaveBeenCalledOnce();
     await preparation;
   });
 
-  it('prepares every supported source towards the page target, with detector in the click task', async () => {
+  it('prepares only the detector for an auto page target', async () => {
     const translatorApi = fakeTranslatorApi();
     const detectorApi = {
       availability: vi.fn(async () => 'available'),
@@ -88,10 +88,7 @@ describe('ChromeTranslator', () => {
     };
     const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
     const pending = engine.prepareForPageTarget('en');
-    expect(translatorApi.create).toHaveBeenCalledWith(expect.objectContaining({
-      sourceLanguage: 'ru', targetLanguage: 'en',
-    }));
-    expect(translatorApi.create).toHaveBeenCalledTimes(5);
+    expect(translatorApi.create).not.toHaveBeenCalled();
     expect(detectorApi.create).toHaveBeenCalledOnce();
     await pending;
   });
@@ -114,7 +111,7 @@ describe('ChromeTranslator', () => {
     await engine.prepareForPageTarget('en');
     expect(await engine.translatePageText('Hello there', 'en')).toBe('Hello there');
     expect(await engine.translatePageText('Привет мир', 'en')).toBe('Hello');
-    expect(api.create).toHaveBeenCalledTimes(5);
+    expect(api.create).toHaveBeenCalledOnce();
   });
 
   it('translates Russian to English with the reverse language pair', async () => {
@@ -134,16 +131,13 @@ describe('ChromeTranslator', () => {
     }));
   });
 
-  it('starts both translation directions and detection during the selection click', async () => {
-    const releaseTranslators: Array<() => void> = [];
+  it('defers a downloadable detected pair to a second activation without speculative translators', async () => {
     let releaseDetector: (() => void) | undefined;
     const translated = vi.fn(async () => 'Длинное английское предложение');
-    const detected = vi.fn(async () => [{ detectedLanguage: 'en', confidence: 0.99 }]);
+    const detected = vi.fn(async () => [{ detectedLanguage: 'ja', confidence: 0.99 }]);
     const translatorApi = {
       availability: vi.fn(async () => 'downloadable'),
-      create: vi.fn(() => new Promise<{ translate: typeof translated; destroy: () => void }>((resolve) => {
-        releaseTranslators.push(() => resolve({ translate: translated, destroy: () => undefined }));
-      })),
+      create: vi.fn(async () => ({ translate: translated, destroy: () => undefined })),
     };
     const detectorApi = {
       availability: vi.fn(async () => 'downloadable'),
@@ -153,22 +147,46 @@ describe('ChromeTranslator', () => {
     };
     const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
 
-    const pending = translateFromUserActivation(
+    const pending = beginTranslationFromUserActivation(
       engine,
-      'A long English sentence selected on the page.',
+      'これは十分に長い日本語の文章です。',
       'auto',
+      'ru',
     );
 
-    expect(translatorApi.create).toHaveBeenCalledTimes(2);
+    expect(translatorApi.create).not.toHaveBeenCalled();
     expect(detectorApi.create).toHaveBeenCalledOnce();
     expect(detected).not.toHaveBeenCalled();
-    releaseTranslators.forEach((release) => release());
     releaseDetector?.();
 
-    await expect(pending).resolves.toMatchObject({
-      translation: 'Длинное английское предложение',
-      sourceLanguage: 'en',
-    });
+    const attempt = await pending;
+    expect(attempt).toMatchObject({ status: 'needs-activation', sourceLanguage: 'ja', targetLanguage: 'ru' });
+    expect(translatorApi.create).not.toHaveBeenCalled();
+    if (attempt.status !== 'needs-activation') throw new Error('Expected activation request');
+    const result = attempt.activate();
+    expect(translatorApi.create).toHaveBeenCalledOnce();
+    await expect(result).resolves.toMatchObject({ translation: 'Длинное английское предложение', sourceLanguage: 'ja' });
+  });
+
+  it('continues an already available detected pair without another activation', async () => {
+    const translatorApi = fakeTranslatorApi({ availability: 'available', translated: 'Здравствуйте' });
+    const detectorApi = {
+      availability: vi.fn(async () => 'available'),
+      create: vi.fn(async () => ({
+        detect: vi.fn(async () => [{ detectedLanguage: 'ko', confidence: 0.99 }]),
+        destroy: vi.fn(),
+      })),
+    };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
+
+    const attempt = await beginTranslationFromUserActivation(
+      engine, '충분히 긴 한국어 문장입니다.', 'auto', 'ru',
+    );
+
+    expect(attempt).toMatchObject({ status: 'translated', result: { sourceLanguage: 'ko', targetLanguage: 'ru' } });
+    expect(translatorApi.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      sourceLanguage: 'ko', targetLanguage: 'ru',
+    }));
   });
 
   it('translates confidently detected Russian text to English in auto mode', async () => {

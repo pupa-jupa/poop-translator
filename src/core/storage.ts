@@ -12,18 +12,19 @@ import type {
   TextScale,
 } from '../shared/types';
 import { scheduleReview } from './review';
-import { isSourceMode, isTargetLanguage } from './languages';
+import { isOcrMode, isSourceMode, isTargetLanguage } from './languages';
 
 export const STORAGE_KEY = 'poopTranslatorState';
 const HISTORY_LIMIT = 500;
 const DEFAULT_TEXT_SCALE: TextScale = 115;
 
 export const DEFAULT_STATE: ExtensionState = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   settings: {
     sourceMode: 'en',
     targetLanguage: 'ru',
     pageTargetLanguage: 'ru',
+    ocrMode: 'auto',
     saveHistory: true,
     showSelectionButton: true,
     textScale: DEFAULT_TEXT_SCALE,
@@ -58,7 +59,8 @@ function normalizedSettings(value: unknown): Settings {
   return {
     sourceMode,
     targetLanguage,
-    pageTargetLanguage: value.pageTargetLanguage === 'en' ? 'en' : 'ru',
+    pageTargetLanguage: isTargetLanguage(value.pageTargetLanguage) ? value.pageTargetLanguage : 'ru',
+    ocrMode: isOcrMode(value.ocrMode) ? value.ocrMode : 'auto',
     saveHistory: typeof value.saveHistory === 'boolean'
       ? value.saveHistory
       : DEFAULT_STATE.settings.saveHistory,
@@ -80,7 +82,7 @@ function normalizedHistory(value: unknown): HistoryEntry[] {
       && nonEmptyString(entry.original)
       && nonEmptyString(entry.translation)
       && nonEmptyString(entry.sourceLanguage)
-      && (entry.targetLanguage === 'ru' || entry.targetLanguage === 'en')
+      && isTargetLanguage(entry.targetLanguage)
       && ['manual', 'selection', 'context-menu', 'ocr-region'].includes(String(entry.source))
       && typeof entry.createdAt === 'number';
   }).slice(0, HISTORY_LIMIT);
@@ -125,11 +127,13 @@ export function normalizeState(value: unknown): ExtensionState {
   const record = isRecord(value) ? value : {};
   const dictionary = normalizedDictionary(record.dictionary);
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     settings: normalizedSettings(record.settings),
     history: normalizedHistory(record.history),
     dictionary,
-    review: record.schemaVersion === 2 || record.schemaVersion === 3 ? normalizedReview(record.review, dictionary) : [],
+    review: record.schemaVersion === 2 || record.schemaVersion === 3 || record.schemaVersion === 4
+      ? normalizedReview(record.review, dictionary)
+      : [],
   };
 }
 
@@ -139,7 +143,7 @@ export function createBackup(
 ): ExtensionBackup {
   return {
     format: 'poop-translator-backup',
-    version: 3,
+    version: 4,
     exportedAt: exportedAt.toISOString(),
     data: normalizeState(state),
   };
@@ -148,7 +152,7 @@ export function createBackup(
 function parseBackup(value: unknown): ExtensionState {
   if (!isRecord(value)
     || value.format !== 'poop-translator-backup'
-    || (value.version !== 1 && value.version !== 2 && value.version !== 3)
+    || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4)
     || !isRecord(value.data)
     || value.data.schemaVersion !== value.version) {
     throw new Error('Файл не похож на резервную копию poop translator');
@@ -296,7 +300,7 @@ export class StorageRepository {
 
   async clearUserData(): Promise<void> {
     await this.mutate((state) => {
-      state.schemaVersion = 3;
+      state.schemaVersion = 4;
       state.settings = { ...DEFAULT_STATE.settings };
       state.history = [];
       state.dictionary = [];

@@ -35,6 +35,9 @@ describe('runtime message protocol', () => {
     expect(isDictionaryLookupRequest({
       type: 'LOOKUP_DICTIONARY', requestId: 'pt-124', text: 'bank', sourceLanguage: 'en',
     })).toBe(true);
+    expect(isContentRequest({
+      type: 'TRANSLATE_PAGE', requestId: 'pt-125', targetLanguage: 'ja',
+    })).toBe(true);
   });
 
   it('accepts a bounded region capture request and rejects malformed geometry', () => {
@@ -56,8 +59,8 @@ describe('runtime message protocol', () => {
       type: 'CAPTURE_REGION', requestId: 'pt-127', region, languages: ['eng', 'deu'],
     })).toBe(true);
     expect(isRegionCaptureRequest({
-      type: 'CAPTURE_REGION', requestId: 'pt-127b', region, languages: ['eng', 'jpn'],
-    })).toBe(false);
+      type: 'CAPTURE_REGION', requestId: 'pt-127b', region, languages: ['jpn'],
+    })).toBe(true);
 
     expect(isOcrRecognitionRequest({
       target: 'offscreen',
@@ -67,6 +70,14 @@ describe('runtime message protocol', () => {
       region,
       languages: ['eng', 'rus'],
     })).toBe(true);
+    expect(isOcrRecognitionRequest({
+      target: 'offscreen', type: 'OCR_RECOGNIZE', requestId: 'pt-128-cjk',
+      imageDataUrl: 'data:image/png;base64,abcd', region, languages: ['chi_sim'],
+    })).toBe(true);
+    expect(isOcrRecognitionRequest({
+      target: 'offscreen', type: 'OCR_RECOGNIZE', requestId: 'pt-128-too-many',
+      imageDataUrl: 'data:image/png;base64,abcd', region, languages: ['jpn', 'kor', 'chi_sim'],
+    })).toBe(false);
     expect(isOcrRecognitionRequest({
       target: 'offscreen',
       type: 'OCR_RECOGNIZE',
@@ -82,7 +93,8 @@ describe('runtime message protocol', () => {
 
   it('rejects malformed or unknown runtime messages', () => {
     expect(isContentRequest({ type: 'TRANSLATE_PAGE', targetLanguage: 'ru' })).toBe(false);
-    expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', targetLanguage: 'fr' })).toBe(false);
+    expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', targetLanguage: 'fr' })).toBe(true);
+    expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', targetLanguage: 'xx' })).toBe(false);
     expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', sourceMode: 'auto' })).toBe(false);
     expect(isContentRequest({ type: 'DELETE_EVERYTHING', requestId: 'pt-1' })).toBe(false);
     expect(isContentRequest({ type: 'SHOW_SELECTION_TRANSLATOR', requestId: 'pt-1', text: 'hello', source: 'context-menu' })).toBe(false);
@@ -105,6 +117,14 @@ describe('runtime message protocol', () => {
       source: 'context-menu',
       sourceMode: 'auto',
       targetLanguage: 'fr',
-    })).toBe(false);
+    })).toBe(true);
+    expect(isContentRequest({
+      type: 'SHOW_SELECTION_TRANSLATOR',
+      requestId: 'pt-context-3',
+      text: 'こんにちは',
+      source: 'context-menu',
+      sourceMode: 'ja',
+      targetLanguage: 'ko',
+    })).toBe(true);
   });
 });

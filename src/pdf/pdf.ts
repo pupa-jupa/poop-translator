@@ -3,14 +3,19 @@ import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDF
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {
   describePdfError,
+  classifyPdfInput,
   pageTextFromItems,
   PDF_LIMITS,
+  processPageBatches,
   safePdfBaseName,
   validatePdfInput,
+  validatePdfPageTextBudget,
   validatePdfTextBudget,
 } from '../core/pdf';
 import { splitText } from '../core/page-translation';
 import { ChromeTranslator } from '../core/translator';
+import { OCR_LANGUAGES, TRANSLATION_LANGUAGES, languageDefinition } from '../core/languages';
+import { beginTranslationFromUserActivation, type TranslationAttempt } from '../core/user-activated-translation';
 import { recognizeCanvas } from '../ocr/tesseract-engine';
 import type { OcrLanguage, PageTargetLanguage } from '../shared/types';
 
@@ -29,15 +34,42 @@ const fileMeta = document.querySelector<HTMLElement>('[data-file-meta]')!;
 const targetSelect = document.querySelector<HTMLSelectElement>('[data-target-language]')!;
 const ocrSelect = document.querySelector<HTMLSelectElement>('[data-ocr-language]')!;
 const translateButton = document.querySelector<HTMLButtonElement>('[data-action="translate"]')!;
+const preparePairButton = document.querySelector<HTMLButtonElement>('[data-action="prepare-pair"]')!;
 const cancelButton = document.querySelector<HTMLButtonElement>('[data-action="cancel"]')!;
 const downloadButton = document.querySelector<HTMLButtonElement>('[data-action="download"]')!;
 const engine = new ChromeTranslator();
+ocrSelect.replaceChildren(
+  new Option('Авто EN/RU', 'auto'),
+  ...OCR_LANGUAGES.map((language) => new Option(language.name, language.code)),
+);
+targetSelect.replaceChildren(...TRANSLATION_LANGUAGES.map((language) => new Option(`На ${language.toName}`, language.code)));
+targetSelect.value = 'ru';
 let loadedPages: LoadedPage[] = [];
 let loadedName = '';
 let completedTarget: PageTargetLanguage | undefined;
 let documentGeneration = 0;
 let translationGeneration = 0;
 let activeLoadingTask: PDFDocumentLoadingTask | undefined;
+let cancelPendingPairActivation: (() => void) | undefined;
+const warningDialog = document.querySelector<HTMLDialogElement>('[data-pdf-warning]')!;
+const warningText = document.querySelector<HTMLElement>('[data-pdf-warning-text]')!;
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function confirmLargePdf(warnings: Array<'large-file' | 'many-pages'>): Promise<boolean> {
+  if (!warnings.length) return Promise.resolve(true);
+  const details: string[] = [];
+  if (warnings.includes('large-file')) details.push('файл больше 20 МБ');
+  if (warnings.includes('many-pages')) details.push('в документе больше 50 страниц');
+  warningText.textContent = `Этот PDF потребует больше памяти и времени (${details.join(', ')}). Обработка останется локальной и будет идти пакетами по 5 страниц.`;
+  warningDialog.returnValue = '';
+  warningDialog.showModal();
+  return new Promise((resolve) => {
+    warningDialog.addEventListener('close', () => resolve(warningDialog.returnValue === 'continue'), { once: true });
+  });
+}
 
 function setError(message?: string): void {
   errorBox.hidden = !message;
@@ -88,8 +120,13 @@ async function renderPageForOcr(page: PDFPageProxy): Promise<HTMLCanvasElement> 
   canvas.height = Math.max(1, Math.round(viewport.height));
   const canvasContext = canvas.getContext('2d', { alpha: false });
   if (!canvasContext) throw new Error('Не удалось подготовить страницу для OCR.');
-  await page.render({ canvas, canvasContext, viewport }).promise;
-  return canvas;
+  try {
+    await page.render({ canvas, canvasContext, viewport }).promise;
+    return canvas;
+  } catch (error) {
+    canvas.width = canvas.height = 1;
+    throw error;
+  }
 }
 
 async function extractPage(page: PDFPageProxy, ocrLanguages: OcrLanguage[]): Promise<Omit<LoadedPage, 'number' | 'translation'>> {
@@ -114,6 +151,7 @@ async function extractPage(page: PDFPageProxy, ocrLanguages: OcrLanguage[]): Pro
   try {
     const recognized = await recognizeCanvas(canvas, ocrLanguages);
     if (!recognized.text) throw new Error('На странице нет распознаваемого текста.');
+    validatePdfPageTextBudget(recognized.text.length);
     return { original: recognized.text, source: 'ocr' };
   } finally {
     canvas.width = canvas.height = 1;
@@ -123,19 +161,27 @@ async function extractPage(page: PDFPageProxy, ocrLanguages: OcrLanguage[]): Pro
 async function loadPdf(file: File): Promise<void> {
   const generation = ++documentGeneration;
   translationGeneration += 1;
+  cancelPendingPairActivation?.();
+  if (warningDialog.open) warningDialog.close('cancel');
   const previousTask = activeLoadingTask;
   activeLoadingTask = undefined;
   if (previousTask) void previousTask.destroy().catch(() => undefined);
   let ownLoadingTask: PDFDocumentLoadingTask | undefined;
   try {
     setError();
-    validatePdfInput(file);
+    const earlyWarnings = classifyPdfInput(file).warnings;
     const ocrLanguages: OcrLanguage[] = ocrSelect.value === 'auto'
       ? ['eng', 'rus']
       : [ocrSelect.value as OcrLanguage];
     setStatus('Открываю PDF на устройстве…');
     translateButton.disabled = true;
-    cancelButton.hidden = true;
+    cancelButton.hidden = false;
+    if (!await confirmLargePdf(earlyWarnings)) {
+      setStatus(loadedPages.length ? 'Открытие отменено. Предыдущий документ сохранён.' : 'Открытие PDF отменено.');
+      translateButton.disabled = loadedPages.length === 0;
+      return;
+    }
+    if (generation !== documentGeneration) return;
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (generation !== documentGeneration) return;
     ownLoadingTask = getDocument({
@@ -147,18 +193,34 @@ async function loadPdf(file: File): Promise<void> {
     activeLoadingTask = ownLoadingTask;
     const nextDocument = await ownLoadingTask.promise;
     if (generation !== documentGeneration) return;
-    validatePdfInput(file, nextDocument.numPages);
+    const classification = classifyPdfInput(file, nextDocument.numPages);
+    const newWarnings = classification.warnings.filter((warning) => !earlyWarnings.includes(warning));
+    if (!await confirmLargePdf(newWarnings)) {
+      setStatus(loadedPages.length ? 'Открытие отменено. Предыдущий документ сохранён.' : 'Открытие PDF отменено.');
+      translateButton.disabled = loadedPages.length === 0;
+      return;
+    }
+    if (generation !== documentGeneration) return;
     const nextPages: LoadedPage[] = [];
     let totalCharacters = 0;
-    for (let index = 1; index <= nextDocument.numPages; index += 1) {
-      if (generation !== documentGeneration) return;
-      setStatus(`Читаю страницу ${index} из ${nextDocument.numPages}…`);
-      const page = await nextDocument.getPage(index);
-      const extracted = await extractPage(page, ocrLanguages);
-      if (generation !== documentGeneration) return;
-      totalCharacters = validatePdfTextBudget(totalCharacters, extracted.original.length);
-      nextPages.push({ number: index, translation: '', ...extracted });
-    }
+    await processPageBatches(
+      nextDocument.numPages,
+      5,
+      async (index) => {
+        setStatus(`Читаю страницу ${index} из ${nextDocument.numPages}…`);
+        const page = await nextDocument.getPage(index);
+        try {
+          const extracted = await extractPage(page, ocrLanguages);
+          if (generation !== documentGeneration) return;
+          totalCharacters = validatePdfTextBudget(totalCharacters, extracted.original.length);
+          nextPages.push({ number: index, translation: '', ...extracted });
+        } finally {
+          page.cleanup();
+        }
+      },
+      yieldToBrowser,
+      () => generation !== documentGeneration,
+    );
     if (generation !== documentGeneration) return;
     loadedPages = nextPages;
     loadedName = file.name;
@@ -179,6 +241,7 @@ async function loadPdf(file: File): Promise<void> {
   } finally {
     if (activeLoadingTask === ownLoadingTask) activeLoadingTask = undefined;
     await ownLoadingTask?.destroy().catch(() => undefined);
+    if (generation === documentGeneration) cancelButton.hidden = true;
   }
 }
 
@@ -193,7 +256,13 @@ async function translatePdf(targetLanguage: PageTargetLanguage, generation: numb
       for (let index = 0; index < chunks.length; index += 1) {
         if (generation !== translationGeneration) return;
         setStatus(`Перевожу страницу ${page.number} из ${loadedPages.length} · фрагмент ${index + 1} из ${chunks.length}`);
-        translations.push(await engine.translatePageText(chunks[index]!, targetLanguage));
+        const attempt = await beginTranslationFromUserActivation(engine, chunks[index]!, 'auto', targetLanguage);
+        if (generation !== translationGeneration) return;
+        const result = attempt.status === 'translated'
+          ? attempt.result
+          : await requestPdfPairActivation(attempt, generation);
+        if (generation !== translationGeneration) return;
+        translations.push(result.translation);
       }
       if (generation !== translationGeneration) return;
       page.translation = translations.join('\n\n');
@@ -211,8 +280,37 @@ async function translatePdf(targetLanguage: PageTargetLanguage, generation: numb
     if (generation === translationGeneration) {
       translateButton.disabled = false;
       cancelButton.hidden = true;
+      preparePairButton.hidden = true;
     }
   }
+}
+
+function requestPdfPairActivation(
+  attempt: Extract<TranslationAttempt, { status: 'needs-activation' }>,
+  generation: number,
+): Promise<Awaited<ReturnType<typeof attempt.activate>>> {
+  return new Promise((resolve, reject) => {
+    const source = languageDefinition(attempt.sourceLanguage).fromName;
+    const target = languageDefinition(attempt.targetLanguage).toName;
+    setStatus(`Определён язык: перевод с ${source} на ${target}. Нажмите «Подготовить и перевести».`);
+    preparePairButton.hidden = false;
+    const cleanup = () => {
+      preparePairButton.hidden = true;
+      preparePairButton.onclick = null;
+      if (cancelPendingPairActivation === cancel) cancelPendingPairActivation = undefined;
+    };
+    const cancel = () => { cleanup(); reject(new DOMException('Операция отменена', 'AbortError')); };
+    cancelPendingPairActivation = cancel;
+    preparePairButton.onclick = () => {
+      if (generation !== translationGeneration) { cancel(); return; }
+      const pending = attempt.activate({
+        onProgress(percent) { if (generation === translationGeneration) setStatus(`Загружаю языковой пакет: ${percent}%`); },
+      });
+      cleanup();
+      void pending.then(resolve, reject);
+    };
+    preparePairButton.focus({ preventScroll: true });
+  });
 }
 
 document.querySelector<HTMLButtonElement>('[data-action="choose-file"]')!.addEventListener('click', () => fileInput.click());
@@ -237,7 +335,7 @@ dropZone.addEventListener('drop', (event) => {
 translateButton.addEventListener('click', () => {
   if (!loadedPages.length) return;
   const generation = ++translationGeneration;
-  const target = targetSelect.value === 'en' ? 'en' : 'ru';
+  const target = targetSelect.value as PageTargetLanguage;
   setError();
   translateButton.disabled = true;
   cancelButton.hidden = false;
@@ -253,9 +351,15 @@ translateButton.addEventListener('click', () => {
 });
 
 cancelButton.addEventListener('click', () => {
+  cancelPendingPairActivation?.();
+  documentGeneration += 1;
   translationGeneration += 1;
+  const loadingTask = activeLoadingTask;
+  activeLoadingTask = undefined;
+  if (loadingTask) void loadingTask.destroy().catch(() => undefined);
+  if (warningDialog.open) warningDialog.close('cancel');
   cancelButton.hidden = true;
-  translateButton.disabled = false;
+  translateButton.disabled = loadedPages.length === 0;
   setStatus('Перевод отменён. Уже готовые страницы остались на экране.');
 });
 

@@ -49,4 +49,38 @@ describe('local OCR fallback lifecycle', () => {
       .toEqual({ text: 'Some text', confidence: 50 });
     expect(terminate).toHaveBeenCalledTimes(1);
   });
+
+  it('replaces the active worker when the selected OCR model changes', async () => {
+    const firstTerminate = vi.fn().mockResolvedValue(undefined);
+    mocks.createWorker
+      .mockResolvedValueOnce({ recognize: vi.fn().mockResolvedValue({ data: { text: '日本語', confidence: 95 } }), setParameters: vi.fn(), terminate: firstTerminate })
+      .mockResolvedValueOnce({ recognize: vi.fn().mockResolvedValue({ data: { text: '한국어', confidence: 95 } }), setParameters: vi.fn(), terminate: vi.fn() });
+    const { recognizeCanvas } = await import('../src/ocr/tesseract-engine');
+
+    await recognizeCanvas(document.createElement('canvas'), ['jpn']);
+    await recognizeCanvas(document.createElement('canvas'), ['kor']);
+
+    expect(firstTerminate).toHaveBeenCalledOnce();
+    expect(mocks.createWorker).toHaveBeenNthCalledWith(1, ['jpn'], expect.anything(), expect.anything());
+    expect(mocks.createWorker).toHaveBeenNthCalledWith(2, ['kor'], expect.anything(), expect.anything());
+  });
+
+  it('serializes a language switch while the previous model is still loading', async () => {
+    let releaseFirst: ((worker: unknown) => void) | undefined;
+    const first = { recognize: vi.fn().mockResolvedValue({ data: { text: '日本語', confidence: 95 } }), setParameters: vi.fn(), terminate: vi.fn().mockResolvedValue(undefined) };
+    const second = { recognize: vi.fn().mockResolvedValue({ data: { text: '한국어', confidence: 95 } }), setParameters: vi.fn(), terminate: vi.fn().mockResolvedValue(undefined) };
+    mocks.createWorker
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
+      .mockResolvedValueOnce(second);
+    const { recognizeCanvas } = await import('../src/ocr/tesseract-engine');
+    const canvas = document.createElement('canvas');
+    const japanese = recognizeCanvas(canvas, ['jpn']);
+    const korean = recognizeCanvas(canvas, ['kor']);
+    await Promise.resolve();
+    expect(mocks.createWorker).toHaveBeenCalledTimes(1);
+    releaseFirst?.(first);
+    await Promise.all([japanese, korean]);
+    expect(first.terminate).toHaveBeenCalledOnce();
+    expect(mocks.createWorker).toHaveBeenCalledTimes(2);
+  });
 });

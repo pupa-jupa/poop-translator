@@ -9,10 +9,35 @@ await mkdir(profileRoot, { recursive: true });
 const profilePath = await mkdtemp(join(profileRoot, 'run-'));
 if (!profilePath.startsWith(`${profileRoot}${sep}`)) throw new Error('Unsafe browser profile path');
 
+function makeTextPdf(pageCount) {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${Array.from({ length: pageCount }, (_, index) => `${4 + index * 2} 0 R`).join(' ')}] /Count ${pageCount} >>`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  for (let page = 1; page <= pageCount; page += 1) {
+    const contentRef = 5 + (page - 1) * 2;
+    const stream = `BT /F1 14 Tf 72 720 Td (Page marker ${page}) Tj ET`;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentRef} 0 R >>`);
+    objects.push(`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`);
+  }
+  let output = '%PDF-1.4\n';
+  const offsets = [0];
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(Buffer.byteLength(output));
+    output += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(output);
+  output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  output += offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
+  output += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(output);
+}
+
 const server = createServer((_request, response) => {
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
   response.end(`<!doctype html><html><body><main style="max-width:600px;margin:80px auto;font:18px sans-serif">
-    <h1>Test article</h1><p id="select-me">Hello world from the translation smoke test.</p>
+    <h1>Test article</h1><p id="select-me">Hello world from the translation smoke test.</p><p id="bank-me">bank</p>
     <div id="ocr-me" style="display:inline-block;padding:14px;background:#fff;color:#000;font:700 42px/1 Arial,sans-serif">OCR TEST</div>
     <button id="site-button">Site button</button></main></body></html>`);
 });
@@ -40,8 +65,13 @@ try {
   await popup.addInitScript(() => {
     globalThis.__poopTranslatorSmoke = { translations: [] };
     class SmokeTranslator {
-      static async availability() { return 'available'; }
+      static async availability(options) {
+        return options.sourceLanguage === 'ja' && options.targetLanguage === 'ru'
+          ? 'downloadable' : 'available';
+      }
       static async create(options) {
+        globalThis.__poopTranslatorSmoke.creations ??= [];
+        globalThis.__poopTranslatorSmoke.creations.push(`${options.sourceLanguage}-${options.targetLanguage}`);
         return {
           async translate(text) {
             globalThis.__poopTranslatorSmoke.translations.push({
@@ -63,7 +93,9 @@ try {
     class SmokeLanguageDetector {
       static async availability() { return 'available'; }
       static async create() {
-        return { async detect() { return [{ detectedLanguage: 'en', confidence: 1 }]; }, destroy() {} };
+        return { async detect(text) {
+          return [{ detectedLanguage: /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text) ? 'ja' : 'en', confidence: 1 }];
+        }, destroy() {} };
       }
     }
     Object.defineProperty(globalThis, 'Translator', { value: SmokeTranslator, configurable: true });
@@ -97,7 +129,9 @@ try {
   const directionValues = await popup.locator('[data-control="source-mode"] option').evaluateAll(
     (options) => options.map((option) => option.value),
   );
-  if (directionValues.join('|') !== 'en|ru|uk|de|fr|es|auto') throw new Error(`Unexpected directions: ${directionValues.join(', ')}`);
+  if (directionValues.length !== 40 || !['en', 'ru', 'fr', 'ja', 'ko', 'zh', 'zh-Hant', 'auto'].every((code) => directionValues.includes(code))) {
+    throw new Error(`Unexpected directions: ${directionValues.join(', ')}`);
+  }
   await popup.locator('[data-control="source-mode"]').selectOption('ru');
   try {
     await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'en', undefined, { timeout: 5_000 });
@@ -154,6 +188,19 @@ try {
   const germanCall = await popup.evaluate(() => globalThis.__poopTranslatorSmoke.translations.at(-1));
   if (germanCall?.sourceLanguage !== 'de' || germanCall?.targetLanguage !== 'ru') {
     throw new Error(`German pair was not used: ${JSON.stringify(germanCall)}`);
+  }
+  await popup.locator('[data-control="source-mode"]').selectOption('auto');
+  await popup.locator('[data-control="target-language"]').selectOption('ru');
+  await popup.locator('#source-text').fill('これは十分に長い日本語の文章です。');
+  await popup.locator('[data-form="translate"] button[type="submit"]').click();
+  await popup.locator('[data-form="translate"] button[type="submit"]').getByText('Подготовить и перевести').waitFor();
+  if (await popup.evaluate(() => globalThis.__poopTranslatorSmoke.creations?.includes('ja-ru'))) {
+    throw new Error('Popup created a downloadable pair before the second click');
+  }
+  await popup.locator('[data-form="translate"] button[type="submit"]').click();
+  await popup.locator('[data-result-translation]').getByText('тестовый перевод', { exact: true }).waitFor();
+  if (!await popup.evaluate(() => globalThis.__poopTranslatorSmoke.creations?.includes('ja-ru'))) {
+    throw new Error('Popup did not prepare the detected pair on activation');
   }
   await popup.locator('[data-control="source-mode"]').selectOption('en');
   await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'ru');
@@ -387,15 +434,20 @@ try {
 
   await context.addInitScript(() => {
     class PdfSmokeTranslator {
-      static async availability() { return 'available'; }
+      static async availability(options) {
+        return globalThis.__downloadablePairs?.includes(`${options.sourceLanguage}-${options.targetLanguage}`)
+          ? 'downloadable' : 'available';
+      }
       static async create(options) {
-        let shouldBlockFirstPdfChunk = true;
+        globalThis.__createdPairs ??= [];
+        globalThis.__createdPairs.push(`${options.sourceLanguage}-${options.targetLanguage}`);
         return {
           async translate(text) {
-            if (shouldBlockFirstPdfChunk && text.includes('Hello PDF')) {
-              shouldBlockFirstPdfChunk = false;
+            if (!globalThis.__blockedFirstPdfChunk && text.includes('Hello PDF')) {
+              globalThis.__blockedFirstPdfChunk = true;
               await new Promise((resolveTranslation) => { globalThis.__releaseFirstPdfTranslation = resolveTranslation; });
             }
+            if (text.startsWith('Page marker')) return `перевод ${text}`;
             return options.targetLanguage === 'en' ? 'test translation' : 'тестовый перевод';
           },
           destroy() {},
@@ -416,7 +468,7 @@ try {
   const pdfOcrLanguages = await pdfPage.locator('[data-ocr-language] option').evaluateAll(
     (options) => options.map((option) => option.value),
   );
-  if (pdfOcrLanguages.join('|') !== 'auto|eng|rus|ukr|deu|fra|spa') {
+  if (pdfOcrLanguages.join('|') !== 'auto|eng|rus|ukr|deu|fra|spa|jpn|kor|chi_sim|chi_tra') {
     throw new Error(`Unexpected PDF OCR languages: ${pdfOcrLanguages.join(', ')}`);
   }
   await pdfPage.locator('#pdf-file').setInputFiles(resolve('tests/fixtures/text-two-pages.pdf'));
@@ -448,6 +500,37 @@ try {
   const downloadPath = await download.path();
   const exported = downloadPath ? await readFile(downloadPath, 'utf8') : '';
   if (!exported.includes('Страница 2') || !exported.includes('тестовый перевод')) throw new Error('PDF TXT export is incomplete');
+  await pdfPage.evaluate(() => { globalThis.__downloadablePairs = ['en-ja']; });
+  await pdfPage.locator('[data-target-language]').selectOption('ja');
+  await pdfPage.locator('[data-action="translate"]').click();
+  await pdfPage.locator('[data-action="prepare-pair"]').waitFor({ state: 'visible' });
+  if (await pdfPage.evaluate(() => globalThis.__createdPairs?.includes('en-ja'))) {
+    throw new Error('PDF created a downloadable pair before the second click');
+  }
+  await pdfPage.locator('[data-action="prepare-pair"]').click();
+  await pdfPage.locator('[data-translation="2"]').getByText('тестовый перевод', { exact: true }).waitFor();
+  if (!await pdfPage.evaluate(() => globalThis.__createdPairs?.includes('en-ja'))) {
+    throw new Error('PDF did not create the selected pair on activation');
+  }
+  await pdfPage.locator('[data-target-language]').selectOption('ru');
+  await pdfPage.locator('#pdf-file').setInputFiles({
+    name: 'long-document.pdf', mimeType: 'application/pdf', buffer: makeTextPdf(51),
+  });
+  await pdfPage.locator('[data-pdf-warning]').waitFor({ state: 'visible' });
+  await pdfPage.locator('[data-pdf-warning] button[value="continue"]').click();
+  await pdfPage.locator('.pdf-page').nth(50).getByText('Page marker 51', { exact: true }).waitFor();
+  await pdfPage.locator('[data-action="translate"]').click();
+  await pdfPage.locator('[data-translation="51"]').getByText('перевод Page marker 51', { exact: true }).waitFor();
+  const longDownloadPromise = pdfPage.waitForEvent('download');
+  await pdfPage.locator('[data-action="download"]').click();
+  const longDownload = await longDownloadPromise;
+  const longPath = await longDownload.path();
+  const longText = longPath ? await readFile(longPath, 'utf8') : '';
+  if (!longText.includes('перевод Page marker 1') || !longText.includes('перевод Page marker 51')) {
+    throw new Error('The 51-page PDF did not export one complete ordered TXT');
+  }
+  await pdfPage.locator('#pdf-file').setInputFiles(resolve('tests/fixtures/text-two-pages.pdf'));
+  await pdfPage.locator('[data-file-name]').getByText('text-two-pages.pdf', { exact: true }).waitFor();
   await pdfPage.locator('#pdf-file').setInputFiles({
     name: 'broken.pdf', mimeType: 'application/pdf', buffer: Buffer.from('not a real PDF'),
   });
@@ -492,6 +575,49 @@ try {
     throw new Error('Selection button is outside the viewport');
   }
   if (!await page.locator('#site-button').isEnabled()) throw new Error('Page interaction was damaged');
+
+  await selectionButton.click();
+  const translationCard = page.locator('[data-poop-translator-root] .pt-card');
+  await translationCard.waitFor({ state: 'visible' });
+  await page.setViewportSize({ width: 500, height: 360 });
+  await page.waitForTimeout(250);
+  const dragHandle = translationCard.getByRole('button', { name: 'Переместить окно перевода' });
+  const handleBox = await dragHandle.boundingBox();
+  if (!handleBox) throw new Error('Card drag handle is missing');
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(490, 340, { steps: 6 });
+  await page.mouse.up();
+  const dragged = await translationCard.boundingBox();
+  if (!dragged || dragged.x < 11 || dragged.y < 11 || dragged.x + dragged.width > 489 || dragged.y + dragged.height > 349) {
+    throw new Error(`Dragged translation card escaped the viewport: ${JSON.stringify(dragged)}`);
+  }
+  await dragHandle.focus();
+  await page.keyboard.press('ArrowLeft');
+  const movedLeft = await translationCard.boundingBox();
+  await page.keyboard.press('Shift+ArrowUp');
+  const movedFine = await translationCard.boundingBox();
+  if (!movedLeft || !movedFine || Math.abs(movedLeft.x - (dragged.x - 10)) > 1
+    || Math.abs(movedFine.y - (movedLeft.y - 1)) > 1) {
+    throw new Error(`Keyboard card movement failed: ${JSON.stringify({ dragged, movedLeft, movedFine })}`);
+  }
+  await page.locator('[data-poop-translator-root]').evaluate((host) => {
+    const variants = host.shadowRoot.querySelector('.pt-variants');
+    const list = variants.querySelector('.pt-variants__list');
+    for (let index = 0; index < 8; index += 1) {
+      const button = document.createElement('button');
+      button.className = 'pt-variant';
+      button.textContent = `Значение ${index + 1}`;
+      list.append(button);
+    }
+    variants.hidden = false;
+    window.dispatchEvent(new Event('resize'));
+  });
+  const expanded = await translationCard.boundingBox();
+  if (!expanded || expanded.y < 11 || expanded.y + expanded.height > 349) {
+    throw new Error(`Card with variants escaped the small viewport: ${JSON.stringify(expanded)}`);
+  }
+  await translationCard.getByRole('button', { name: 'Закрыть' }).click();
 
   const tabId = await worker.evaluate(async (url) => {
     const tabs = await chrome.tabs.query({});
