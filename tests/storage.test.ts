@@ -35,7 +35,7 @@ describe('StorageRepository', () => {
       dictionary: [{ id: 'd', original: 'cat', translation: 'кот', note: '', createdAt: 4, updatedAt: 5 }],
     };
     const state = await new StorageRepository(storage).loadState();
-    expect(state.schemaVersion).toBe(2);
+    expect(state.schemaVersion).toBe(3);
     expect(state.history[0]?.requestId).toBe('r');
     expect(state.dictionary[0]?.id).toBe('d');
     expect(state.review).toEqual([]);
@@ -130,14 +130,14 @@ describe('StorageRepository', () => {
     expect(state.dictionary).toHaveLength(2);
     expect(state.review.find((item) => item.dictionaryId === entry.id)?.lastReviewedAt).toBe(2_000);
     expect(state.review.find((item) => item.dictionaryId === 'backup-dog')?.dueAt).toBe(900);
-    expect(createBackup(state).version).toBe(2);
+    expect(createBackup(state).version).toBe(3);
   });
 
   it('remaps imported dictionary IDs that conflict with a different local pair', async () => {
     const storage = new MemoryStorage();
     const repository = new StorageRepository(storage);
     const { entry } = await repository.addDictionaryEntry({ original: 'cat', translation: 'кот' });
-    const backup = { format: 'poop-translator-backup', version: 2, data: {
+    const backup = { format: 'poop-translator-backup', version: 3, data: {
       ...DEFAULT_STATE,
       dictionary: [{ ...entry, original: 'dog', translation: 'собака' }],
       review: [{ dictionaryId: entry.id, dueAt: 900, lastReviewedAt: 100, streak: 1 }],
@@ -177,6 +177,21 @@ describe('StorageRepository', () => {
     await repository.updateSettings({ pageTargetLanguage: 'en' });
     expect((await repository.loadState()).settings.pageTargetLanguage).toBe('en');
     expect(createBackup(await repository.loadState()).data.settings.pageTargetLanguage).toBe('en');
+  });
+
+  it('migrates the old direction into a target and preserves multilingual choices', async () => {
+    const storage = new MemoryStorage();
+    storage.data[STORAGE_KEY] = {
+      schemaVersion: 2,
+      settings: { sourceMode: 'ru', pageTargetLanguage: 'ru', saveHistory: true, showSelectionButton: true, textScale: 115 },
+      history: [], dictionary: [], review: [],
+    };
+    const repository = new StorageRepository(storage);
+    expect((await repository.loadState()).settings.targetLanguage).toBe('en');
+    await repository.updateSettings({ sourceMode: 'de', targetLanguage: 'ru' });
+    expect((await repository.loadState()).settings).toMatchObject({ sourceMode: 'de', targetLanguage: 'ru' });
+    await repository.updateSettings({ sourceMode: 'ru', targetLanguage: 'ru' });
+    expect((await repository.loadState()).settings).toMatchObject({ sourceMode: 'ru', targetLanguage: 'en' });
   });
 
   it('does not persist translations when history is disabled', async () => {

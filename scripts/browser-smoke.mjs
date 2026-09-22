@@ -97,9 +97,20 @@ try {
   const directionValues = await popup.locator('[data-control="source-mode"] option').evaluateAll(
     (options) => options.map((option) => option.value),
   );
-  if (directionValues.join('|') !== 'en|ru|auto') throw new Error(`Unexpected directions: ${directionValues.join(', ')}`);
+  if (directionValues.join('|') !== 'en|ru|uk|de|fr|es|auto') throw new Error(`Unexpected directions: ${directionValues.join(', ')}`);
   await popup.locator('[data-control="source-mode"]').selectOption('ru');
-  await popup.locator('[data-target-language]').getByText('Английский').waitFor();
+  try {
+    await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'en', undefined, { timeout: 5_000 });
+  } catch {
+    const languageDiagnostics = await popup.evaluate(async () => ({
+      source: document.querySelector('[data-control="source-mode"]')?.value,
+      target: document.querySelector('[data-control="target-language"]')?.value,
+      toast: document.querySelector('[data-toast]')?.textContent,
+      state: (await chrome.storage.local.get('poopTranslatorState')).poopTranslatorState,
+    }));
+    throw new Error(`Russian source switch failed: ${JSON.stringify(languageDiagnostics)}`);
+  }
+  if (await popup.locator('[data-control="target-language"]').inputValue() !== 'en') throw new Error('Russian source did not switch target to English');
   await popup.locator('#source-text').fill('банк');
   await popup.locator('[data-form="translate"] button[type="submit"]').click();
   await popup.locator('[data-result-translation]').getByText('test translation', { exact: true }).waitFor();
@@ -121,7 +132,31 @@ try {
   }));
   if (typeScale.tabs < 11 || typeScale.input < 17) throw new Error(`Popup type is too small: ${JSON.stringify(typeScale)}`);
   await popup.locator('[data-control="source-mode"]').selectOption('en');
-  await popup.locator('[data-target-language]').getByText('Русский').waitFor();
+  await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'ru');
+  if (await popup.locator('[data-control="target-language"]').inputValue() !== 'ru') throw new Error('English source did not switch target to Russian');
+  await popup.locator('[data-control="source-mode"]').selectOption('de');
+  await popup.locator('[data-control="target-language"]').selectOption('en');
+  await popup.waitForFunction(async () => {
+    const stored = (await chrome.storage.local.get('poopTranslatorState')).poopTranslatorState;
+    return stored?.settings?.sourceMode === 'de'
+      && stored?.settings?.targetLanguage === 'en'
+      && document.querySelector('[data-control="source-mode"]')?.value === 'de'
+      && document.querySelector('[data-control="target-language"]')?.value === 'en';
+  });
+  await popup.locator('[data-control="target-language"]').selectOption('ru');
+  await popup.waitForFunction(async () => {
+    const stored = (await chrome.storage.local.get('poopTranslatorState')).poopTranslatorState;
+    return stored?.settings?.sourceMode === 'de' && stored?.settings?.targetLanguage === 'ru';
+  });
+  await popup.locator('#source-text').fill('Guten Morgen');
+  await popup.locator('[data-form="translate"] button[type="submit"]').click();
+  await popup.locator('[data-result-translation]').getByText('тестовый перевод', { exact: true }).waitFor();
+  const germanCall = await popup.evaluate(() => globalThis.__poopTranslatorSmoke.translations.at(-1));
+  if (germanCall?.sourceLanguage !== 'de' || germanCall?.targetLanguage !== 'ru') {
+    throw new Error(`German pair was not used: ${JSON.stringify(germanCall)}`);
+  }
+  await popup.locator('[data-control="source-mode"]').selectOption('en');
+  await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'ru');
   await popup.evaluate(() => { globalThis.__poopTranslatorSmoke.translations = []; });
   await popup.locator('#source-text').fill('bank');
   await popup.locator('[data-form="translate"] button[type="submit"]').click();
@@ -138,7 +173,8 @@ try {
     throw new Error(`Wrong result direction: ${await popup.locator('[data-result-language]').textContent()}`);
   }
   await popup.locator('[data-control="source-mode"]').selectOption('en');
-  await popup.locator('[data-target-language]').getByText('Русский').waitFor();
+  await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'ru');
+  if (await popup.locator('[data-control="target-language"]').inputValue() !== 'ru') throw new Error('Target changed unexpectedly');
   const riverBankVariant = popup.getByRole('button', { name: 'Добавить «берег» в словарь' });
   await riverBankVariant.waitFor();
   await riverBankVariant.click();
@@ -377,6 +413,12 @@ try {
   pdfPage.on('pageerror', (error) => errors.push(`PDF: ${error.message}`));
   await pdfPage.goto(`chrome-extension://${extensionId}/pdf.html`);
   await pdfPage.locator('h1').getByText('Перевод PDF').waitFor();
+  const pdfOcrLanguages = await pdfPage.locator('[data-ocr-language] option').evaluateAll(
+    (options) => options.map((option) => option.value),
+  );
+  if (pdfOcrLanguages.join('|') !== 'auto|eng|rus|ukr|deu|fra|spa') {
+    throw new Error(`Unexpected PDF OCR languages: ${pdfOcrLanguages.join(', ')}`);
+  }
   await pdfPage.locator('#pdf-file').setInputFiles(resolve('tests/fixtures/text-two-pages.pdf'));
   await pdfPage.locator('.pdf-page').nth(1).waitFor();
   if (!await pdfPage.locator('.pdf-page').nth(0).getByText('Hello PDF world.', { exact: true }).count()

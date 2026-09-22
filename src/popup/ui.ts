@@ -36,11 +36,17 @@ export function mountPopupShell(root: HTMLElement): void {
               <select data-control="source-mode">
                 <option value="en">Английский</option>
                 <option value="ru">Русский</option>
-                <option value="auto">Авто EN ↔ RU</option>
+                <option value="uk">Украинский</option>
+                <option value="de">Немецкий</option>
+                <option value="fr">Французский</option>
+                <option value="es">Испанский</option>
+                <option value="auto">Авто · 6 языков</option>
               </select>
             </label>
             <span class="language-arrow">→</span>
-            <div class="target-language"><small>Перевод</small><strong data-target-language>Русский</strong></div>
+            <label>Перевод
+              <select data-control="target-language"><option value="ru">Русский</option><option value="en">Английский</option></select>
+            </label>
           </div>
 
           <section class="region-tool">
@@ -113,8 +119,11 @@ export function mountPopupShell(root: HTMLElement): void {
         <section id="panel-settings" class="view" data-view="settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
           <div class="section-head"><div><span class="section-kicker">Под себя</span><h2>Настройки</h2></div></div>
           <div class="settings-group">
-            <label class="setting-row setting-row--stack"><span><strong>Направление перевода</strong><small>Английский ↔ русский или автоматический выбор</small></span>
-              <select data-control="settings-source-mode"><option value="en">EN → RU</option><option value="ru">RU → EN</option><option value="auto">Авто EN ↔ RU</option></select>
+            <label class="setting-row setting-row--stack"><span><strong>Исходный язык</strong><small>Для текста, выделения и OCR области</small></span>
+              <select data-control="settings-source-mode"><option value="en">Английский</option><option value="ru">Русский</option><option value="uk">Украинский</option><option value="de">Немецкий</option><option value="fr">Французский</option><option value="es">Испанский</option><option value="auto">Авто · 6 языков</option></select>
+            </label>
+            <label class="setting-row setting-row--stack"><span><strong>Язык перевода</strong><small>Русский или английский</small></span>
+              <select data-control="settings-target-language"><option value="ru">Русский</option><option value="en">Английский</option></select>
             </label>
             <label class="setting-row"><span><strong>Сохранять историю</strong><small>Ручные, выделенные и OCR-переводы</small></span><input class="switch" type="checkbox" aria-label="Сохранять историю" data-control="save-history"></label>
             <label class="setting-row"><span><strong>Кнопка у выделения</strong><small>Показывать маленького помощника на страницах</small></span><input class="switch" type="checkbox" aria-label="Показывать кнопку возле выделения" data-control="selection-button"></label>
