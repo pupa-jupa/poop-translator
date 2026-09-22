@@ -44,6 +44,7 @@
 **Interfaces:**
 - Produces: `LanguageCode`, `SourceMode`, `TranslationLanguageDefinition`, `TRANSLATION_LANGUAGES`, `isLanguageCode()`, `isSourceMode()`, `isTargetLanguage()`, `languageDefinition()`.
 - Produces: `ExtensionState.schemaVersion: 4` and `ExtensionBackup.version: 4`, while importing versions 1–3.
+- Produces: `Settings.ocrMode: 'auto' | OcrLanguage`; old states migrate to `auto`.
 - Consumes: official Chrome codes fixed in the approved spec.
 
 - [ ] **Step 1: Write failing catalog, validation, UI, and migration tests**
@@ -55,7 +56,7 @@ expect(TRANSLATION_LANGUAGES.map(({ code }) => code)).toEqual(expect.arrayContai
 expect(isLanguageCode('ko')).toBe(true);
 expect(isLanguageCode('xx')).toBe(false);
 expect(normalizeState({ schemaVersion: 3, settings: { sourceMode: 'fr', targetLanguage: 'ru' } }))
-  .toMatchObject({ schemaVersion: 4, settings: { sourceMode: 'fr', targetLanguage: 'ru' } });
+  .toMatchObject({ schemaVersion: 4, settings: { sourceMode: 'fr', targetLanguage: 'ru', ocrMode: 'auto' } });
 expect(createBackup(DEFAULT_STATE).version).toBe(4);
 expect(isContentRequest({
   type: 'SHOW_SELECTION_TRANSLATOR', requestId: 'pt-1', text: 'こんにちは',
@@ -82,7 +83,7 @@ export type TargetLanguage = LanguageCode;
 export type PageTargetLanguage = LanguageCode;
 ```
 
-Create the `TRANSLATION_LANGUAGES` array with all 39 codes and stable Russian names. Generate source/target/page `<option>` elements from the catalog, with RU and EN first, instead of duplicating hard-coded markup. Reject equal explicit source/target by switching the source to `auto`; preserve all other valid pairs. Normalize every valid v1–v3 backup to schema v4 and write v4 only.
+Create the `TRANSLATION_LANGUAGES` array with all 39 codes and stable Russian names. Generate source/target/page `<option>` elements from the catalog, with RU and EN first, instead of duplicating hard-coded markup. Reject equal explicit source/target by switching the source to `auto`; preserve all other valid pairs. Add `ocrMode: 'auto'` while normalizing old state. Normalize every valid v1–v3 backup to schema v4 and write v4 only.
 
 - [ ] **Step 4: Run focused tests and confirm GREEN**
 
@@ -183,6 +184,7 @@ git commit -m "feat: prepare detected language pairs on demand"
 
 **Interfaces:**
 - Produces: `OcrLanguage = 'eng' | 'rus' | 'ukr' | 'deu' | 'fra' | 'spa' | 'jpn' | 'kor' | 'chi_sim' | 'chi_tra'`.
+- Produces: `OcrMode = OcrLanguage | 'auto'`; popup settings persist it as `Settings.ocrMode`, while the PDF tab keeps its selector local to that tab.
 - Produces: `OCR_LANGUAGES` and `ocrLanguageForTranslationLanguage(code)`.
 - Consumes: local packages `@tesseract.js-data/jpn`, `kor`, `chi_sim`, `chi_tra` version `1.0.0`.
 
@@ -211,7 +213,7 @@ Run:
 npm install --save-exact "@tesseract.js-data/jpn@1.0.0" "@tesseract.js-data/kor@1.0.0" "@tesseract.js-data/chi_sim@1.0.0" "@tesseract.js-data/chi_tra@1.0.0"
 ```
 
-Extend the copy script to copy exactly the ten declared models. Populate OCR selectors from `OCR_LANGUAGES`; retain auto EN+RU only. Continue terminating the previous worker on a language change so no CJK models coexist in memory. Update notices with the same Tesseract data attribution already used by existing traineddata.
+Extend the copy script to copy exactly the ten declared models. Populate OCR selectors from `OCR_LANGUAGES`; retain auto EN+RU only. Add a separate popup/settings OCR selector bound to `Settings.ocrMode`; region capture uses this value rather than `sourceMode`. Continue terminating the previous worker on a language change so no CJK models coexist in memory. Update notices with the same Tesseract data attribution already used by existing traineddata.
 
 - [ ] **Step 4: Extend real OCR smoke and asset verification**
 
