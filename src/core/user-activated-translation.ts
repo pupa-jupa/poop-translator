@@ -1,4 +1,4 @@
-import type { SourceMode, TranslationResult } from '../shared/types';
+import type { SourceMode, TargetLanguage, TranslationResult } from '../shared/types';
 import type { ChromeTranslator, TranslationCallbacks } from './translator';
 
 type UserActivatedEngine = Pick<ChromeTranslator, 'prepareForMode' | 'translate'>;
@@ -12,7 +12,8 @@ export function translateFromUserActivation(
   text: string,
   sourceMode: SourceMode,
   callbacks: TranslationCallbacks = {},
+  targetLanguage?: TargetLanguage,
 ): Promise<TranslationResult> {
-  const preparation = engine.prepareForMode(sourceMode, callbacks);
-  return preparation.then(() => engine.translate(text, sourceMode, callbacks));
+  const preparation = engine.prepareForMode(sourceMode, callbacks, targetLanguage);
+  return preparation.then(() => engine.translate(text, sourceMode, callbacks, targetLanguage));
 }

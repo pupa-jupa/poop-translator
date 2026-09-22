@@ -1,8 +1,10 @@
-export type SourceMode = 'en' | 'ru' | 'auto';
-export type PageTargetLanguage = 'en' | 'ru';
+export type LanguageCode = 'en' | 'ru' | 'uk' | 'de' | 'fr' | 'es';
+export type SourceMode = LanguageCode | 'auto';
+export type TargetLanguage = 'en' | 'ru';
+export type PageTargetLanguage = TargetLanguage;
 export type TextScale = 100 | 115 | 130;
 export type TranslationSource = 'manual' | 'selection' | 'context-menu' | 'ocr-region';
-export type OcrLanguage = 'eng' | 'rus';
+export type OcrLanguage = 'eng' | 'rus' | 'ukr' | 'deu' | 'fra' | 'spa';
 
 export interface Point {
   x: number;
@@ -37,6 +39,7 @@ export interface OcrRecognitionResult {
 
 export interface Settings {
   sourceMode: SourceMode;
+  targetLanguage: TargetLanguage;
   pageTargetLanguage: PageTargetLanguage;
   saveHistory: boolean;
   showSelectionButton: boolean;
@@ -49,7 +52,7 @@ export interface HistoryEntry {
   original: string;
   translation: string;
   sourceLanguage: string;
-  targetLanguage: 'ru' | 'en';
+  targetLanguage: TargetLanguage;
   source: TranslationSource;
   createdAt: number;
 }
@@ -81,7 +84,7 @@ export interface ReviewProgress {
 }
 
 export interface ExtensionState {
-  schemaVersion: 2;
+  schemaVersion: 3;
   settings: Settings;
   history: HistoryEntry[];
   dictionary: DictionaryEntry[];
@@ -90,7 +93,7 @@ export interface ExtensionState {
 
 export interface ExtensionBackup {
   format: 'poop-translator-backup';
-  version: 2;
+  version: 3;
   exportedAt: string;
   data: ExtensionState;
 }
@@ -109,8 +112,8 @@ export interface TranslationResult {
   original: string;
   translation: string;
   sourceLanguage: string;
-  targetLanguage: 'ru' | 'en';
-  alreadyRussian: boolean;
+  targetLanguage: TargetLanguage;
+  alreadyTarget: boolean;
 }
 
 export interface DictionaryVariant {

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF · poop translator</title>
+    <script type="module" crossorigin src="/assets/pdf.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-B5Qt9EMX.js">
+    <link rel="modulepreload" crossorigin href="/assets/languages-D6_hPaBp.js">
+    <link rel="modulepreload" crossorigin href="/assets/translator-Dq9POm8-.js">
+    <link rel="modulepreload" crossorigin href="/assets/tesseract-engine-BEoqhUa3.js">
+    <link rel="stylesheet" crossorigin href="/assets/pdf-BRTcjH-z.css">
+  </head>
+  <body>
+    <main class="pdf-app">
+      <header class="pdf-header">
+        <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><path fill="currentColor" d="M9 36c0-5 4-9 10-10-5-1-7-5-5-9 1-4 5-6 9-5-2-3 0-7 4-9 1 5 5 6 8 9 2 3 1 5-1 7 5 1 9 4 9 9 0 4-3 7-5 8 2 1 3 4 3 6H10c-1-2-1-4-1-6Z"/><circle cx="21" cy="27" r="2.2" fill="#3b1027"/><circle cx="32" cy="27" r="2.2" fill="#3b1027"/><path d="M20 34c4 3 9 3 13 0" fill="none" stroke="#3b1027" stroke-width="2.3" stroke-linecap="round"/></svg></div>
+        <div><p class="eyebrow">poop translator</p><h1>Перевод PDF</h1><p>Файл обрабатывается на вашем устройстве</p></div>
+      </header>
+
+      <section class="upload-card" data-drop-zone>
+        <input id="pdf-file" type="file" accept="application/pdf,.pdf" hidden />
+        <div class="upload-icon" aria-hidden="true">PDF</div>
+        <div><h2>Выберите PDF</h2><p>Текстовый документ или скан · до 20 МБ и 50 страниц</p></div>
+        <label>Язык скана
+          <select data-ocr-language aria-label="Язык OCR для страниц-сканов"><option value="auto">Авто EN/RU</option><option value="eng">Английский</option><option value="rus">Русский</option><option value="ukr">Украинский</option><option value="deu">Немецкий</option><option value="fra">Французский</option><option value="spa">Испанский</option></select>
+        </label>
+        <button class="button button--accent" type="button" data-action="choose-file">Выбрать файл</button>
+      </section>
+
+      <div class="status" data-status role="status" aria-live="polite">PDF не выбран</div>
+      <div class="error" data-error role="alert" hidden></div>
+
+      <section class="workspace" data-workspace hidden>
+        <div class="toolbar">
+          <div class="file-meta"><strong data-file-name></strong><span data-file-meta></span></div>
+          <label>Перевести документ
+            <select data-target-language aria-label="Язык перевода PDF"><option value="ru">На русский</option><option value="en">На английский</option></select>
+          </label>
+          <button class="button button--accent" type="button" data-action="translate">Перевести</button>
+          <button class="button button--soft" type="button" data-action="cancel" hidden>Отменить</button>
+          <button class="button button--soft" type="button" data-action="download" hidden>Скачать TXT</button>
+        </div>
+        <div class="pages" data-pages></div>
+      </section>
+    </main>
+  </body>
+</html>

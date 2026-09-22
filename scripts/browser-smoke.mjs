@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { chromium } from 'playwright';
 
@@ -97,9 +97,20 @@ try {
   const directionValues = await popup.locator('[data-control="source-mode"] option').evaluateAll(
     (options) => options.map((option) => option.value),
   );
-  if (directionValues.join('|') !== 'en|ru|auto') throw new Error(`Unexpected directions: ${directionValues.join(', ')}`);
+  if (directionValues.join('|') !== 'en|ru|uk|de|fr|es|auto') throw new Error(`Unexpected directions: ${directionValues.join(', ')}`);
   await popup.locator('[data-control="source-mode"]').selectOption('ru');
-  await popup.locator('[data-target-language]').getByText('Английский').waitFor();
+  try {
+    await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'en', undefined, { timeout: 5_000 });
+  } catch {
+    const languageDiagnostics = await popup.evaluate(async () => ({
+      source: document.querySelector('[data-control="source-mode"]')?.value,
+      target: document.querySelector('[data-control="target-language"]')?.value,
+      toast: document.querySelector('[data-toast]')?.textContent,
+      state: (await chrome.storage.local.get('poopTranslatorState')).poopTranslatorState,
+    }));
+    throw new Error(`Russian source switch failed: ${JSON.stringify(languageDiagnostics)}`);
+  }
+  if (await popup.locator('[data-control="target-language"]').inputValue() !== 'en') throw new Error('Russian source did not switch target to English');
   await popup.locator('#source-text').fill('банк');
   await popup.locator('[data-form="translate"] button[type="submit"]').click();
   await popup.locator('[data-result-translation]').getByText('test translation', { exact: true }).waitFor();
@@ -121,7 +132,31 @@ try {
   }));
   if (typeScale.tabs < 11 || typeScale.input < 17) throw new Error(`Popup type is too small: ${JSON.stringify(typeScale)}`);
   await popup.locator('[data-control="source-mode"]').selectOption('en');
-  await popup.locator('[data-target-language]').getByText('Русский').waitFor();
+  await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'ru');
+  if (await popup.locator('[data-control="target-language"]').inputValue() !== 'ru') throw new Error('English source did not switch target to Russian');
+  await popup.locator('[data-control="source-mode"]').selectOption('de');
+  await popup.locator('[data-control="target-language"]').selectOption('en');
+  await popup.waitForFunction(async () => {
+    const stored = (await chrome.storage.local.get('poopTranslatorState')).poopTranslatorState;
+    return stored?.settings?.sourceMode === 'de'
+      && stored?.settings?.targetLanguage === 'en'
+      && document.querySelector('[data-control="source-mode"]')?.value === 'de'
+      && document.querySelector('[data-control="target-language"]')?.value === 'en';
+  });
+  await popup.locator('[data-control="target-language"]').selectOption('ru');
+  await popup.waitForFunction(async () => {
+    const stored = (await chrome.storage.local.get('poopTranslatorState')).poopTranslatorState;
+    return stored?.settings?.sourceMode === 'de' && stored?.settings?.targetLanguage === 'ru';
+  });
+  await popup.locator('#source-text').fill('Guten Morgen');
+  await popup.locator('[data-form="translate"] button[type="submit"]').click();
+  await popup.locator('[data-result-translation]').getByText('тестовый перевод', { exact: true }).waitFor();
+  const germanCall = await popup.evaluate(() => globalThis.__poopTranslatorSmoke.translations.at(-1));
+  if (germanCall?.sourceLanguage !== 'de' || germanCall?.targetLanguage !== 'ru') {
+    throw new Error(`German pair was not used: ${JSON.stringify(germanCall)}`);
+  }
+  await popup.locator('[data-control="source-mode"]').selectOption('en');
+  await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'ru');
   await popup.evaluate(() => { globalThis.__poopTranslatorSmoke.translations = []; });
   await popup.locator('#source-text').fill('bank');
   await popup.locator('[data-form="translate"] button[type="submit"]').click();
@@ -138,7 +173,8 @@ try {
     throw new Error(`Wrong result direction: ${await popup.locator('[data-result-language]').textContent()}`);
   }
   await popup.locator('[data-control="source-mode"]').selectOption('en');
-  await popup.locator('[data-target-language]').getByText('Русский').waitFor();
+  await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'ru');
+  if (await popup.locator('[data-control="target-language"]').inputValue() !== 'ru') throw new Error('Target changed unexpectedly');
   const riverBankVariant = popup.getByRole('button', { name: 'Добавить «берег» в словарь' });
   await riverBankVariant.waitFor();
   await riverBankVariant.click();
@@ -349,6 +385,84 @@ try {
   await mkdir(dirname(screenshotPath), { recursive: true });
   await popup.screenshot({ path: screenshotPath });
 
+  await context.addInitScript(() => {
+    class PdfSmokeTranslator {
+      static async availability() { return 'available'; }
+      static async create(options) {
+        let shouldBlockFirstPdfChunk = true;
+        return {
+          async translate(text) {
+            if (shouldBlockFirstPdfChunk && text.includes('Hello PDF')) {
+              shouldBlockFirstPdfChunk = false;
+              await new Promise((resolveTranslation) => { globalThis.__releaseFirstPdfTranslation = resolveTranslation; });
+            }
+            return options.targetLanguage === 'en' ? 'test translation' : 'тестовый перевод';
+          },
+          destroy() {},
+        };
+      }
+    }
+    class PdfSmokeLanguageDetector {
+      static async availability() { return 'available'; }
+      static async create() { return { async detect() { return [{ detectedLanguage: 'en', confidence: 1 }]; }, destroy() {} }; }
+    }
+    Object.defineProperty(globalThis, 'Translator', { value: PdfSmokeTranslator, configurable: true });
+    Object.defineProperty(globalThis, 'LanguageDetector', { value: PdfSmokeLanguageDetector, configurable: true });
+  });
+  const pdfPage = await context.newPage();
+  pdfPage.on('pageerror', (error) => errors.push(`PDF: ${error.message}`));
+  await pdfPage.goto(`chrome-extension://${extensionId}/pdf.html`);
+  await pdfPage.locator('h1').getByText('Перевод PDF').waitFor();
+  const pdfOcrLanguages = await pdfPage.locator('[data-ocr-language] option').evaluateAll(
+    (options) => options.map((option) => option.value),
+  );
+  if (pdfOcrLanguages.join('|') !== 'auto|eng|rus|ukr|deu|fra|spa') {
+    throw new Error(`Unexpected PDF OCR languages: ${pdfOcrLanguages.join(', ')}`);
+  }
+  await pdfPage.locator('#pdf-file').setInputFiles(resolve('tests/fixtures/text-two-pages.pdf'));
+  await pdfPage.locator('.pdf-page').nth(1).waitFor();
+  if (!await pdfPage.locator('.pdf-page').nth(0).getByText('Hello PDF world.', { exact: true }).count()
+    || !await pdfPage.locator('.pdf-page').nth(1).getByText('The cat is on the chair.', { exact: true }).count()) {
+    throw new Error('PDF.js did not extract both text pages in order');
+  }
+  await pdfPage.locator('[data-action="translate"]').click();
+  await pdfPage.waitForFunction(() => typeof globalThis.__releaseFirstPdfTranslation === 'function');
+  await pdfPage.locator('[data-action="cancel"]').click();
+  await pdfPage.evaluate(() => globalThis.__releaseFirstPdfTranslation());
+  await pdfPage.waitForTimeout(50);
+  if (await pdfPage.locator('[data-translation="1"]').textContent() !== '') {
+    throw new Error('A stale PDF translation updated the page after cancellation');
+  }
+  await pdfPage.locator('[data-action="translate"]').click();
+  await pdfPage.locator('[data-translation="2"]').getByText('тестовый перевод', { exact: true }).waitFor();
+  if (process.env.POOP_TRANSLATOR_PDF_SCREENSHOT_PATH) {
+    const pdfScreenshotPath = resolve(process.env.POOP_TRANSLATOR_PDF_SCREENSHOT_PATH);
+    await mkdir(dirname(pdfScreenshotPath), { recursive: true });
+    await pdfPage.screenshot({ path: pdfScreenshotPath, fullPage: true });
+  }
+  await pdfPage.locator('[data-target-language]').selectOption('en');
+  const downloadPromise = pdfPage.waitForEvent('download');
+  await pdfPage.locator('[data-action="download"]').click();
+  const download = await downloadPromise;
+  if (download.suggestedFilename() !== 'text-two-pages-ru.txt') throw new Error(`Wrong PDF export name: ${download.suggestedFilename()}`);
+  const downloadPath = await download.path();
+  const exported = downloadPath ? await readFile(downloadPath, 'utf8') : '';
+  if (!exported.includes('Страница 2') || !exported.includes('тестовый перевод')) throw new Error('PDF TXT export is incomplete');
+  await pdfPage.locator('#pdf-file').setInputFiles({
+    name: 'broken.pdf', mimeType: 'application/pdf', buffer: Buffer.from('not a real PDF'),
+  });
+  await pdfPage.locator('[data-error]').getByText('PDF повреждён или имеет неподдерживаемый формат.').waitFor();
+  if (!await pdfPage.locator('.pdf-page').nth(1).getByText('The cat is on the chair.', { exact: true }).count()
+    || await pdfPage.locator('[data-file-name]').textContent() !== 'text-two-pages.pdf') {
+    throw new Error('A broken replacement PDF destroyed the previous result');
+  }
+  await pdfPage.locator('#pdf-file').setInputFiles(resolve('tests/fixtures/scan-one-page.pdf'));
+  await pdfPage.locator('.pdf-page').getByText(/HELLO\s+OCR/i).waitFor({ timeout: 90_000 });
+  if (!await pdfPage.locator('.page-heading').getByText('распознано локально', { exact: true }).count()) {
+    throw new Error('Scanned PDF did not use the local OCR fallback');
+  }
+  await pdfPage.close();
+
   const page = await context.newPage();
   await page.goto(`http://127.0.0.1:${address.port}`);
   await page.locator('#select-me').evaluate((element) => {
@@ -449,6 +563,12 @@ try {
     type: 'RESTORE_PAGE', requestId: 'pt-smoke-restore',
   }), tabId);
   await page.locator('[data-poop-translator-root] .pt-page-prompt').waitFor({ state: 'detached' });
+
+  const openedPdfPromise = context.waitForEvent('page');
+  await popup.locator('[data-action="open-pdf"]').click();
+  const openedPdf = await openedPdfPromise;
+  await openedPdf.waitForURL(`chrome-extension://${extensionId}/pdf.html`);
+  await openedPdf.close();
 
   if (errors.length) throw new Error(`Popup console errors: ${errors.join(' | ')}`);
   const translatorType = await worker.evaluate(() => typeof globalThis.Translator);

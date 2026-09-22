@@ -30,6 +30,7 @@ const server = createServer((request, response) => {
   response.end(`<!doctype html><html><body style="margin:80px;background:#fff">
     <div id="ocr-fixture" style="display:inline-block;padding:18px;color:#000;font:700 48px/1 Arial,sans-serif">HELLO OCR</div>
     <div id="ocr-russian" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 48px/1 Arial,sans-serif">ПРИВЕТ</div>
+    <div id="ocr-german" style="display:block;width:max-content;margin-top:28px;padding:18px;color:#000;font:700 48px/1 Arial,sans-serif">GUTEN TAG</div>
     ${imageFixture ? '<img id="ocr-image" src="/fixture.png" style="display:block;margin-top:20px" />' : ''}
   </body></html>`);
 });
@@ -107,6 +108,29 @@ try {
   await editor.waitFor({ timeout: 90_000 });
   const russianText = (await editor.inputValue()).replace(/\s+/g, ' ').trim().toUpperCase();
   if (!russianText.includes('ПРИВЕТ')) throw new Error(`Unexpected Russian OCR result: ${JSON.stringify(russianText)}`);
+  await page.keyboard.press('Escape');
+  const germanSettings = await context.newPage();
+  await germanSettings.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
+  const germanMode = await germanSettings.evaluate(() => chrome.runtime.sendMessage({
+    type: 'STORAGE_MUTATION', requestId: 'pt-ocr-smoke-german-language',
+    operation: 'updateSettings', payload: { sourceMode: 'de', targetLanguage: 'ru' },
+  }));
+  if (!germanMode?.ok) throw new Error(`Could not select German OCR: ${JSON.stringify(germanMode)}`);
+  await germanSettings.close();
+  await page.bringToFront();
+  await worker.evaluate((id) => chrome.tabs.sendMessage(id, {
+    type: 'START_REGION_SELECTION', requestId: 'pt-ocr-smoke-german-start',
+  }), tabId);
+  await overlay.waitFor();
+  const germanFixture = await page.locator('#ocr-german').boundingBox();
+  if (!germanFixture) throw new Error('Could not measure German OCR fixture');
+  await page.mouse.move(germanFixture.x + 2, germanFixture.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(germanFixture.x + germanFixture.width - 2, germanFixture.y + germanFixture.height - 2, { steps: 4 });
+  await page.mouse.up();
+  await editor.waitFor({ timeout: 90_000 });
+  const germanText = (await editor.inputValue()).replace(/\s+/g, ' ').trim().toUpperCase();
+  if (!germanText.includes('GUTEN TAG')) throw new Error(`Unexpected German OCR result: ${JSON.stringify(germanText)}`);
   let imageText;
   if (imageFixture) {
     await page.keyboard.press('Escape');
@@ -138,7 +162,7 @@ try {
       }
     }
   }
-  console.log(JSON.stringify({ localOcr: true, english: text, russian: russianText, imageText }, null, 2));
+  console.log(JSON.stringify({ localOcr: true, english: text, russian: russianText, german: germanText, imageText }, null, 2));
 } finally {
   await context.close();
   await new Promise((resolveServer) => server.close(resolveServer));

@@ -54,6 +54,9 @@ describe('runtime message protocol', () => {
     })).toBe(false);
     expect(isRegionCaptureRequest({
       type: 'CAPTURE_REGION', requestId: 'pt-127', region, languages: ['eng', 'deu'],
+    })).toBe(true);
+    expect(isRegionCaptureRequest({
+      type: 'CAPTURE_REGION', requestId: 'pt-127b', region, languages: ['eng', 'jpn'],
     })).toBe(false);
 
     expect(isOcrRecognitionRequest({
@@ -84,5 +87,24 @@ describe('runtime message protocol', () => {
     expect(isContentRequest({ type: 'DELETE_EVERYTHING', requestId: 'pt-1' })).toBe(false);
     expect(isContentRequest({ type: 'SHOW_SELECTION_TRANSLATOR', requestId: 'pt-1', text: 'hello', source: 'context-menu' })).toBe(false);
     expect(isContentRequest(null)).toBe(false);
+  });
+
+  it('accepts an auto-detected context-menu translation with an explicit target', () => {
+    expect(isContentRequest({
+      type: 'SHOW_SELECTION_TRANSLATOR',
+      requestId: 'pt-context-1',
+      text: 'Guten Morgen',
+      source: 'context-menu',
+      sourceMode: 'auto',
+      targetLanguage: 'ru',
+    })).toBe(true);
+    expect(isContentRequest({
+      type: 'SHOW_SELECTION_TRANSLATOR',
+      requestId: 'pt-context-2',
+      text: 'Bonjour',
+      source: 'context-menu',
+      sourceMode: 'auto',
+      targetLanguage: 'fr',
+    })).toBe(false);
   });
 });

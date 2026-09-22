@@ -1,4 +1,5 @@
-import type { EngineAvailability, PageTargetLanguage, SourceMode, TranslationResult } from '../shared/types';
+import type { EngineAvailability, LanguageCode, PageTargetLanguage, SourceMode, TargetLanguage, TranslationResult } from '../shared/types';
+import { LANGUAGE_CODES, languageDefinition, sourceCandidates } from './languages';
 
 type AvailabilityValue = string;
 
@@ -65,8 +66,8 @@ function normalizeAvailability(value: AvailabilityValue): EngineAvailability {
 
 function messageForCreationError(
   error: unknown,
-  sourceLanguage: 'en' | 'ru' = 'en',
-  targetLanguage: 'en' | 'ru' = 'ru',
+  sourceLanguage: LanguageCode = 'en',
+  targetLanguage: TargetLanguage = 'ru',
 ): TranslationEngineError {
   if (error instanceof TranslationEngineError) return error;
   const name = error instanceof DOMException ? error.name : '';
@@ -83,8 +84,8 @@ function messageForCreationError(
     );
   }
   if (name === 'NotSupportedError') {
-    const source = sourceLanguage === 'ru' ? 'русского' : 'английского';
-    const target = targetLanguage === 'en' ? 'английский' : 'русский';
+    const source = languageDefinition(sourceLanguage).fromName;
+    const target = languageDefinition(targetLanguage).toName;
     return new TranslationEngineError(
       'PAIR_UNAVAILABLE',
       `Перевод с ${source} на ${target} недоступен в этом Chrome.`,
@@ -105,7 +106,8 @@ export class ChromeTranslator {
     this.environment = environment;
   }
 
-  async getAvailability(sourceLanguage: 'en' | 'ru', targetLanguage: 'en' | 'ru' = sourceLanguage === 'ru' ? 'en' : 'ru'): Promise<EngineAvailability> {
+  async getAvailability(sourceLanguage: LanguageCode, targetLanguage: TargetLanguage = sourceLanguage === 'ru' ? 'en' : 'ru'): Promise<EngineAvailability> {
+    if (sourceLanguage === targetLanguage) return 'available';
     const api = this.environment.Translator;
     if (!api) return 'unavailable';
     try {
@@ -129,8 +131,8 @@ export class ChromeTranslator {
   }
 
   private createTranslator(
-    sourceLanguage: 'en' | 'ru',
-    targetLanguage: 'en' | 'ru',
+    sourceLanguage: LanguageCode,
+    targetLanguage: TargetLanguage,
     callbacks: TranslationCallbacks,
   ): Promise<TranslatorInstanceLike> {
     const api = this.environment.Translator;
@@ -170,7 +172,7 @@ export class ChromeTranslator {
     if (!api) return undefined;
     if (this.detector) return this.detector;
     const modelCreation = api.create({
-      expectedInputLanguages: ['en', 'ru'],
+      expectedInputLanguages: [...LANGUAGE_CODES],
       monitor(monitor) {
         monitor.addEventListener('downloadprogress', (event) => {
           callbacks.onProgress?.(Math.round(Math.max(0, Math.min(1, event.loaded)) * 100));
@@ -184,17 +186,21 @@ export class ChromeTranslator {
     return this.detector;
   }
 
-  async prepare(sourceLanguage: 'en' | 'ru' = 'en', callbacks: TranslationCallbacks = {}): Promise<void> {
-    await this.createTranslator(sourceLanguage, sourceLanguage === 'ru' ? 'en' : 'ru', callbacks);
+  async prepare(sourceLanguage: LanguageCode = 'en', callbacks: TranslationCallbacks = {}, targetLanguage: TargetLanguage = sourceLanguage === 'ru' ? 'en' : 'ru'): Promise<void> {
+    if (sourceLanguage !== targetLanguage) await this.createTranslator(sourceLanguage, targetLanguage, callbacks);
   }
 
-  async prepareForMode(sourceMode: SourceMode, callbacks: TranslationCallbacks = {}): Promise<void> {
+  async prepareForMode(sourceMode: SourceMode, callbacks: TranslationCallbacks = {}, targetLanguage?: TargetLanguage): Promise<void> {
     // Every required create call happens before the first await, while transient user
     // activation from the button click is still available.
-    const sources: Array<'en' | 'ru'> = sourceMode === 'auto' ? ['en', 'ru'] : [sourceMode];
-    const preparations: Array<Promise<unknown>> = sources.map((sourceLanguage) => this.createTranslator(
+    const sources = sourceMode === 'auto'
+      ? targetLanguage ? sourceCandidates(targetLanguage) : ['en', 'ru'] as LanguageCode[]
+      : [sourceMode];
+    const preparations: Array<Promise<unknown>> = sources
+      .filter((sourceLanguage) => sourceLanguage !== targetLanguage)
+      .map((sourceLanguage) => this.createTranslator(
       sourceLanguage,
-      sourceLanguage === 'ru' ? 'en' : 'ru',
+      targetLanguage ?? (sourceLanguage === 'ru' ? 'en' : 'ru'),
       callbacks,
     ));
     if (sourceMode === 'auto') {
@@ -204,22 +210,22 @@ export class ChromeTranslator {
     try {
       await Promise.all(preparations);
     } catch (error) {
-      throw messageForCreationError(error);
+      throw messageForCreationError(error, sources[0] ?? 'en', targetLanguage ?? 'ru');
     }
   }
 
   async prepareForPageTarget(targetLanguage: PageTargetLanguage, callbacks: TranslationCallbacks = {}): Promise<void> {
-    const sourceLanguage = targetLanguage === 'ru' ? 'en' : 'ru';
-    // Both create calls begin in the user's click task, before the first await.
-    const translator = this.createTranslator(sourceLanguage, targetLanguage, callbacks);
+    const sources = sourceCandidates(targetLanguage);
+    // Every create call begins in the user's click task, before the first await.
+    const translators = sources.map((sourceLanguage) => this.createTranslator(sourceLanguage, targetLanguage, callbacks));
     // Script detection handles plain English/Russian immediately. A detector download
     // must not hold the entire page while the required translator is already ready.
     const detector = this.createDetector({});
     if (detector) void detector.catch(() => undefined);
     try {
-      await translator;
+      await Promise.all(translators);
     } catch (error) {
-      throw messageForCreationError(error, sourceLanguage, targetLanguage);
+      throw messageForCreationError(error, sources[0] ?? 'en', targetLanguage);
     }
   }
 
@@ -238,21 +244,24 @@ export class ChromeTranslator {
     }
   }
 
-  private async detectSource(text: string, callbacks: TranslationCallbacks): Promise<'en' | 'ru'> {
+  private async detectSource(text: string, callbacks: TranslationCallbacks): Promise<LanguageCode> {
     const hasLatin = /[a-z]/i.test(text);
-    const hasCyrillic = /[а-яё]/i.test(text);
-    if (hasCyrillic && !hasLatin) return 'ru';
-    if (hasLatin && !hasCyrillic) return 'en';
+    const hasCyrillic = /\p{Script=Cyrillic}/u.test(text);
+    if (hasCyrillic && !hasLatin && /[іїєґ]/i.test(text)) return 'uk';
     if (text.length < 8) return hasCyrillic ? 'ru' : 'en';
     const detectorPromise = this.createDetector(callbacks);
-    if (!detectorPromise) return 'en';
+    if (!detectorPromise) return hasCyrillic ? 'ru' : 'en';
     try {
       const detector = await detectorPromise;
       const [best] = await detector.detect(text);
-      if (!best || best.confidence < 0.65 || best.detectedLanguage === 'und') return 'en';
-      return best.detectedLanguage === 'ru' ? 'ru' : 'en';
+      if (!best || best.confidence < 0.65 || best.detectedLanguage === 'und') {
+        return hasCyrillic ? 'ru' : 'en';
+      }
+      return LANGUAGE_CODES.includes(best.detectedLanguage as LanguageCode)
+        ? best.detectedLanguage as LanguageCode
+        : hasCyrillic ? 'ru' : 'en';
     } catch {
-      return 'en';
+      return hasCyrillic ? 'ru' : 'en';
     }
   }
 
@@ -260,6 +269,7 @@ export class ChromeTranslator {
     text: string,
     sourceMode: SourceMode,
     callbacks: TranslationCallbacks = {},
+    targetLanguage?: TargetLanguage,
   ): Promise<TranslationResult> {
     const original = text.trim();
     if (!original) {
@@ -273,14 +283,17 @@ export class ChromeTranslator {
     }
 
     try {
-      const sourceLanguage: 'en' | 'ru' = sourceMode === 'auto'
+      const sourceLanguage: LanguageCode = sourceMode === 'auto'
         ? await this.detectSource(original, callbacks)
         : sourceMode;
-      const targetLanguage = sourceLanguage === 'ru' ? 'en' : 'ru';
-      const translator = await this.createTranslator(sourceLanguage, targetLanguage, callbacks);
+      const resolvedTarget = targetLanguage ?? (sourceLanguage === 'ru' ? 'en' : 'ru');
+      if (sourceLanguage === resolvedTarget) {
+        return { original, translation: original, sourceLanguage, targetLanguage: resolvedTarget, alreadyTarget: true };
+      }
+      const translator = await this.createTranslator(sourceLanguage, resolvedTarget, callbacks);
       const translation = (await translator.translate(original)).trim();
       if (!translation) throw new Error('Empty translation');
-      return { original, translation, sourceLanguage, targetLanguage, alreadyRussian: false };
+      return { original, translation, sourceLanguage, targetLanguage: resolvedTarget, alreadyTarget: false };
     } catch (error) {
       throw messageForCreationError(error);
     }
