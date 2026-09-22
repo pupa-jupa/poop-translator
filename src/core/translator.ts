@@ -246,21 +246,25 @@ export class ChromeTranslator {
   async detectSourceLanguage(text: string, callbacks: TranslationCallbacks = {}): Promise<LanguageCode> {
     const hasLatin = /[a-z]/i.test(text);
     const hasCyrillic = /\p{Script=Cyrillic}/u.test(text);
+    const hasHan = /\p{Script=Han}/u.test(text);
+    if (text.length < 8 && !hasLatin && /\p{Script=Hangul}/u.test(text)) return 'ko';
+    if (text.length < 8 && !hasLatin && /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text)) return 'ja';
     if (hasCyrillic && !hasLatin && /[іїєґ]/i.test(text)) return 'uk';
-    if (text.length < 8) return hasCyrillic ? 'ru' : 'en';
+    const fallback: LanguageCode = hasCyrillic ? 'ru' : hasHan ? 'zh' : 'en';
+    if (text.length < 8 && !hasHan) return fallback;
     const detectorPromise = this.createDetector(callbacks);
-    if (!detectorPromise) return hasCyrillic ? 'ru' : 'en';
+    if (!detectorPromise) return fallback;
     try {
       const detector = await detectorPromise;
       const [best] = await detector.detect(text);
       if (!best || best.confidence < 0.65 || best.detectedLanguage === 'und') {
-        return hasCyrillic ? 'ru' : 'en';
+        return fallback;
       }
       return LANGUAGE_CODES.includes(best.detectedLanguage as LanguageCode)
         ? best.detectedLanguage as LanguageCode
-        : hasCyrillic ? 'ru' : 'en';
+        : fallback;
     } catch {
-      return hasCyrillic ? 'ru' : 'en';
+      return fallback;
     }
   }
 

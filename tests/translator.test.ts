@@ -260,6 +260,20 @@ describe('ChromeTranslator', () => {
     expect(detectorApi.create).not.toHaveBeenCalled();
   });
 
+  it('does not classify short CJK OCR text as English', async () => {
+    const detected = vi.fn(async (text: string) => [{
+      detectedLanguage: text === '日本語' ? 'ja' : 'zh', confidence: 0.99,
+    }]);
+    const detectorApi = { availability: vi.fn(), create: vi.fn(async () => ({ detect: detected, destroy: vi.fn() })) };
+    const engine = new ChromeTranslator({ Translator: fakeTranslatorApi(), LanguageDetector: detectorApi });
+
+    await expect(engine.detectSourceLanguage('日本語')).resolves.toBe('ja');
+    await expect(engine.detectSourceLanguage('한국어')).resolves.toBe('ko');
+    await expect(engine.detectSourceLanguage('中文')).resolves.toBe('zh');
+    expect(detected).toHaveBeenCalledWith('日本語');
+    expect(detected).toHaveBeenCalledWith('中文');
+  });
+
   it('recognizes a short Russian word by its script without language detector', async () => {
     const translatorApi = fakeTranslatorApi({ translated: 'cat' });
     const detectorApi = { availability: vi.fn(), create: vi.fn() };
