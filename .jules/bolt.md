@@ -1,0 +1,3 @@
+## 2024-05-18 - Fast DOM filtering in TreeWalkers
+**Learning:** During page translation, filtering text nodes using `TreeWalker` can be a significant bottleneck if the acceptance criteria involves querying the DOM hierarchy and computed styles repeatedly. Evaluating attributes and computed styles (`getComputedStyle`) on parent nodes up to the document root over and over for every single text node makes DOM traversal scale incredibly poorly on large pages.
+**Action:** When filtering DOM trees deeply (e.g. going up `parentElement`), always implement a traversal cache (like a `Map<Element, boolean>`) within the context of the operation to memoize the skipped/not-skipped status of branches, reducing expensive redundant style recalculations and layout thrills.

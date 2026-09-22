@@ -4,25 +4,58 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
-    const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
-    const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
-  }
-  return false;
-}
-
 export function findMainContent(documentRoot: Document = document): HTMLElement {
   return documentRoot.querySelector<HTMLElement>('main, article, [role="main"]') ?? documentRoot.body;
 }
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+  // Cache to avoid repeated expensive DOM lookups (e.g. getComputedStyle) on the same elements.
+  const skipCache = new Map<Element, boolean>();
+
+  function isSkippedElement(element: Element | null): boolean {
+    let current = element;
+    const path: Element[] = [];
+    let isSkipped = false;
+
+    while (current) {
+      const cached = skipCache.get(current);
+      if (cached !== undefined) {
+        isSkipped = cached;
+        break;
+      }
+      path.push(current);
+      if (SKIPPED_TAGS.has(current.tagName)) {
+        isSkipped = true;
+        break;
+      }
+      if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') {
+        isSkipped = true;
+        break;
+      }
+      if (current.hasAttribute('data-poop-translator-root')) {
+        isSkipped = true;
+        break;
+      }
+      const editable = current.getAttribute('contenteditable');
+      if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) {
+        isSkipped = true;
+        break;
+      }
+      const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
+      if (style?.display === 'none' || style?.visibility === 'hidden') {
+        isSkipped = true;
+        break;
+      }
+      current = current.parentElement;
+    }
+
+    for (const el of path) {
+      skipCache.set(el, isSkipped);
+    }
+    return isSkipped;
+  }
+
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
