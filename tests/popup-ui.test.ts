@@ -13,7 +13,9 @@ describe('popup shell', () => {
     expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');
     expect(root.querySelector<HTMLElement>('[data-view="translate"]')?.hidden).toBe(false);
     expect(Array.from(root.querySelectorAll<HTMLOptionElement>('[data-control="source-mode"] option')).map((option) => option.value))
-      .toEqual(['en', 'ru', 'auto']);
+      .toEqual(['en', 'ru', 'uk', 'de', 'fr', 'es', 'auto']);
+    expect(Array.from(root.querySelectorAll<HTMLOptionElement>('[data-control="target-language"] option')).map((option) => option.value))
+      .toEqual(['ru', 'en']);
   });
 
   it('changes the visible panel and accessible selection together', () => {

@@ -31,7 +31,7 @@ const coreRoot = join(projectRoot, 'node_modules', 'tesseract.js-core');
 const coreFiles = (await readdir(coreRoot)).filter((name) => name.endsWith('-lstm.wasm.js'));
 await Promise.all(coreFiles.map((name) => copy(join(coreRoot, name), join(destinationRoot, 'core', name))));
 
-for (const language of ['eng', 'rus']) {
+for (const language of ['eng', 'rus', 'ukr', 'deu', 'fra', 'spa']) {
   await copy(
     join(projectRoot, 'node_modules', '@tesseract.js-data', language, '4.0.0_best_int', `${language}.traineddata.gz`),
     join(destinationRoot, 'lang', `${language}.traineddata.gz`),

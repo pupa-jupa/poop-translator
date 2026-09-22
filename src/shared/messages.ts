@@ -1,4 +1,5 @@
-import type { OcrLanguage, OcrRecognitionResult, PageTargetLanguage, RegionRect, SourceMode, TranslationSource } from './types';
+import type { OcrLanguage, OcrRecognitionResult, PageTargetLanguage, RegionRect, SourceMode, TargetLanguage, TranslationSource } from './types';
+import { isOcrLanguage, isSourceMode, isTargetLanguage } from '../core/languages';
 
 export type PageOperationState = 'idle' | 'awaiting-activation' | 'translating' | 'translated' | 'error';
 
@@ -10,7 +11,7 @@ export interface PageStatus {
 }
 
 export type ContentRequest =
-  | { type: 'SHOW_SELECTION_TRANSLATOR'; requestId: string; text: string; source: Extract<TranslationSource, 'context-menu'>; sourceMode: Exclude<SourceMode, 'auto'> }
+  | { type: 'SHOW_SELECTION_TRANSLATOR'; requestId: string; text: string; source: Extract<TranslationSource, 'context-menu'>; sourceMode: SourceMode; targetLanguage: TargetLanguage }
   | { type: 'START_REGION_SELECTION'; requestId: string }
   | { type: 'REGION_OCR_STARTED'; requestId: string }
   | { type: 'TRANSLATE_PAGE'; requestId: string; targetLanguage: PageTargetLanguage }
@@ -61,9 +62,10 @@ export function isContentRequest(value: unknown): value is ContentRequest {
       return typeof value.text === 'string'
         && value.text.trim().length > 0
         && value.source === 'context-menu'
-        && (value.sourceMode === 'en' || value.sourceMode === 'ru');
+        && isSourceMode(value.sourceMode)
+        && isTargetLanguage(value.targetLanguage);
     case 'TRANSLATE_PAGE':
-      return value.targetLanguage === 'en' || value.targetLanguage === 'ru';
+      return isTargetLanguage(value.targetLanguage);
     case 'START_REGION_SELECTION':
     case 'REGION_OCR_STARTED':
     case 'RESTORE_PAGE':
@@ -96,7 +98,7 @@ function isRegionPayload(regionValue: unknown, languagesValue: unknown): boolean
     || (region.left as number) + (region.width as number) > (region.viewportWidth as number)
     || (region.top as number) + (region.height as number) > (region.viewportHeight as number)) return false;
   if (!Array.isArray(languagesValue) || languagesValue.length < 1 || languagesValue.length > 2) return false;
-  return languagesValue.every((language) => language === 'eng' || language === 'rus')
+  return languagesValue.every(isOcrLanguage)
     && new Set(languagesValue).size === languagesValue.length;
 }
 

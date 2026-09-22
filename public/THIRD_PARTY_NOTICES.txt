@@ -23,8 +23,9 @@ The transformed data is distributed under the same CC BY-SA 3.0 terms.
 Tesseract.js 7.0.0 and tesseract.js-core 7.0.0 are distributed under the
 Apache License 2.0: https://github.com/naptha/tesseract.js
 
-English and Russian OCR language packages @tesseract.js-data/eng 1.0.0 and
-@tesseract.js-data/rus 1.0.0 declare MIT in their npm package metadata.
+English, Russian, Ukrainian, German, French and Spanish OCR language packages
+@tesseract.js-data/eng, rus, ukr, deu, fra and spa 1.0.0 declare MIT in their
+npm package metadata.
 The bundled 4.0.0_best_int models are based on tessdata_best, whose source
 repository licenses all its trained models under Apache License 2.0:
 https://github.com/tesseract-ocr/tessdata_best

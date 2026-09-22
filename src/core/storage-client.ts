@@ -10,6 +10,7 @@ import type {
   ReviewRating,
   Settings,
 } from '../shared/types';
+import { isLanguageCode, isSourceMode, isTargetLanguage } from './languages';
 
 export type StorageMutationOperation =
   | 'updateSettings'
@@ -57,7 +58,8 @@ function isString(value: unknown, maxLength: number, allowEmpty = false): value 
 
 function isSettingsPatch(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  return (value.sourceMode === undefined || value.sourceMode === 'en' || value.sourceMode === 'ru' || value.sourceMode === 'auto')
+  return (value.sourceMode === undefined || isSourceMode(value.sourceMode))
+    && (value.targetLanguage === undefined || isTargetLanguage(value.targetLanguage))
     && (value.pageTargetLanguage === undefined || value.pageTargetLanguage === 'en' || value.pageTargetLanguage === 'ru')
     && (value.saveHistory === undefined || typeof value.saveHistory === 'boolean')
     && (value.showSelectionButton === undefined || typeof value.showSelectionButton === 'boolean')
@@ -76,8 +78,8 @@ function isHistoryInput(value: unknown): boolean {
     && isString(value.requestId, 200)
     && isString(value.original, 10_000)
     && isString(value.translation, 10_000)
-    && (value.sourceLanguage === 'en' || value.sourceLanguage === 'ru')
-    && (value.targetLanguage === 'en' || value.targetLanguage === 'ru')
+    && isLanguageCode(value.sourceLanguage)
+    && isTargetLanguage(value.targetLanguage)
     && (value.source === 'manual' || value.source === 'selection' || value.source === 'context-menu'
       || value.source === 'ocr-region');
 }
@@ -98,7 +100,7 @@ function hasValidPayload(operation: StorageMutationOperation, payload: unknown):
     case 'importBackup':
       return isRecord(payload)
         && payload.format === 'poop-translator-backup'
-        && (payload.version === 1 || payload.version === 2)
+        && (payload.version === 1 || payload.version === 2 || payload.version === 3)
         && isRecord(payload.data);
     case 'clearHistory':
     case 'clearDictionary':

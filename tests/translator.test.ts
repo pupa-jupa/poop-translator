@@ -80,7 +80,7 @@ describe('ChromeTranslator', () => {
     await preparation;
   });
 
-  it('prepares only the pair towards the page target, with detector in the click task', async () => {
+  it('prepares every supported source towards the page target, with detector in the click task', async () => {
     const translatorApi = fakeTranslatorApi();
     const detectorApi = {
       availability: vi.fn(async () => 'available'),
@@ -88,9 +88,10 @@ describe('ChromeTranslator', () => {
     };
     const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
     const pending = engine.prepareForPageTarget('en');
-    expect(translatorApi.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+    expect(translatorApi.create).toHaveBeenCalledWith(expect.objectContaining({
       sourceLanguage: 'ru', targetLanguage: 'en',
     }));
+    expect(translatorApi.create).toHaveBeenCalledTimes(5);
     expect(detectorApi.create).toHaveBeenCalledOnce();
     await pending;
   });
@@ -113,7 +114,7 @@ describe('ChromeTranslator', () => {
     await engine.prepareForPageTarget('en');
     expect(await engine.translatePageText('Hello there', 'en')).toBe('Hello there');
     expect(await engine.translatePageText('Привет мир', 'en')).toBe('Hello');
-    expect(api.create).toHaveBeenCalledOnce();
+    expect(api.create).toHaveBeenCalledTimes(5);
   });
 
   it('translates Russian to English with the reverse language pair', async () => {
@@ -187,7 +188,7 @@ describe('ChromeTranslator', () => {
       translation: 'Good afternoon',
       sourceLanguage: 'ru',
       targetLanguage: 'en',
-      alreadyRussian: false,
+      alreadyTarget: false,
     });
     expect(translatorApi.create).toHaveBeenCalledWith(expect.objectContaining({
       sourceLanguage: 'ru',
@@ -215,6 +216,49 @@ describe('ChromeTranslator', () => {
 
     expect(result).toMatchObject({ translation: 'cat', sourceLanguage: 'ru', targetLanguage: 'en' });
     expect(detectorApi.create).not.toHaveBeenCalled();
+  });
+
+  it('translates an explicit German source to Russian', async () => {
+    const translatorApi = fakeTranslatorApi({ translated: 'Доброе утро' });
+    const engine = new ChromeTranslator({ Translator: translatorApi });
+    await engine.prepareForMode('de', {}, 'ru');
+    await expect(engine.translate('Guten Morgen', 'de', {}, 'ru')).resolves.toMatchObject({
+      translation: 'Доброе утро', sourceLanguage: 'de', targetLanguage: 'ru', alreadyTarget: false,
+    });
+    expect(translatorApi.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ sourceLanguage: 'de', targetLanguage: 'ru' }));
+  });
+
+  it('uses language detection for a German sentence in auto mode', async () => {
+    const translatorApi = fakeTranslatorApi({ translated: 'Как твои дела?' });
+    const detectorApi = {
+      availability: vi.fn(async () => 'available'),
+      create: vi.fn(async () => ({
+        detect: vi.fn(async () => [{ detectedLanguage: 'de', confidence: 0.98 }]),
+        destroy: vi.fn(),
+      })),
+    };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
+    await expect(engine.translate('Wie geht es dir?', 'auto', {}, 'ru')).resolves.toMatchObject({
+      sourceLanguage: 'de', targetLanguage: 'ru', translation: 'Как твои дела?',
+    });
+    expect(translatorApi.create).toHaveBeenCalledWith(expect.objectContaining({ sourceLanguage: 'de', targetLanguage: 'ru' }));
+  });
+
+  it('falls back to Russian script when detection confidence is too low', async () => {
+    const translatorApi = fakeTranslatorApi({ translated: 'A long Russian sentence' });
+    const detectorApi = {
+      availability: vi.fn(async () => 'available'),
+      create: vi.fn(async () => ({
+        detect: vi.fn(async () => [{ detectedLanguage: 'uk', confidence: 0.42 }]),
+        destroy: vi.fn(),
+      })),
+    };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
+
+    await expect(engine.translate('Это длинное русское предложение', 'auto', {}, 'en')).resolves.toMatchObject({
+      sourceLanguage: 'ru', targetLanguage: 'en', translation: 'A long Russian sentence',
+    });
+    expect(translatorApi.create).toHaveBeenCalledWith(expect.objectContaining({ sourceLanguage: 'ru', targetLanguage: 'en' }));
   });
 
   it('maps unsupported language pairs to a stable error code', async () => {

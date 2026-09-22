@@ -8,6 +8,7 @@ import { getStorageClient } from './core/storage-client';
 import { persistTranslationHistory, type HistoryPersistenceResult } from './core/translation-history';
 import { ChromeTranslator } from './core/translator';
 import { translateFromUserActivation } from './core/user-activated-translation';
+import { ocrLanguagesForMode } from './core/languages';
 import {
   createRequestId,
   isContentRequest,
@@ -18,19 +19,19 @@ import {
 } from './shared/messages';
 import type {
   DictionaryVariant,
-  OcrLanguage,
   OcrRecognitionResult,
   PageTargetLanguage,
   RegionRect,
   Settings,
   SourceMode,
+  TargetLanguage,
   TranslationResult,
   TranslationSource,
 } from './shared/types';
 
 const engine = new ChromeTranslator();
 const repository = getStorageClient();
-let settings: Settings = { sourceMode: 'en', pageTargetLanguage: 'ru', saveHistory: true, showSelectionButton: true, textScale: 115 };
+let settings: Settings = { sourceMode: 'en', targetLanguage: 'ru', pageTargetLanguage: 'ru', saveHistory: true, showSelectionButton: true, textScale: 115 };
 let host: HTMLDivElement | undefined;
 let layer: HTMLDivElement | undefined;
 let selectionButton: HTMLButtonElement | undefined;
@@ -50,6 +51,7 @@ type PreparationOutcome = { ok: true } | { ok: false; error: unknown };
 interface RegionOperation {
   requestId: string;
   sourceMode: SourceMode;
+  targetLanguage: TargetLanguage;
   preparation: Promise<PreparationOutcome>;
   view?: CardView;
 }
@@ -260,7 +262,7 @@ async function saveSuccessfulTranslation(
   source: TranslationSource,
   requestId: string,
 ): Promise<HistoryPersistenceResult> {
-  if (result.alreadyRussian) return { status: 'skipped' };
+  if (result.alreadyTarget) return { status: 'skipped' };
   return persistTranslationHistory(() => repository.addHistory({
     requestId,
     original: result.original,
@@ -278,6 +280,7 @@ async function showTranslationCard(
   userActivated: boolean,
   requestId = createRequestId(),
   sourceMode: SourceMode = settings.sourceMode,
+  targetLanguage: TargetLanguage = settings.targetLanguage,
 ): Promise<void> {
   regionOperation = undefined;
   const view = cardShell(text, rect);
@@ -300,11 +303,11 @@ async function showTranslationCard(
           const label = view.status.querySelector('span:last-child');
           if (label) label.textContent = `Загружаю языковой пакет: ${percent}%`;
         },
-      });
+      }, targetLanguage);
       if (!view.element.isConnected) return;
       view.status.hidden = true;
       view.translation.hidden = false;
-      view.translation.textContent = result.alreadyRussian ? 'Текст уже на русском' : result.translation;
+      view.translation.textContent = result.alreadyTarget ? 'Текст уже на выбранном языке' : result.translation;
       const copy = makeButton('Копировать');
       copy.addEventListener('click', () => {
         void navigator.clipboard.writeText(result.translation)
@@ -324,7 +327,7 @@ async function showTranslationCard(
           showToast('Не удалось добавить перевод в словарь');
         });
       });
-      if (!result.alreadyRussian) view.actions.append(copy, add);
+      if (!result.alreadyTarget) view.actions.append(copy, add);
       positionCardElement(view.element, view.anchor);
       void showAlternativeVariants(view, result).catch(() => undefined);
       const historyResult = await saveSuccessfulTranslation(result, source, requestId);
@@ -352,15 +355,9 @@ async function showTranslationCard(
   }
 }
 
-function ocrLanguagesForMode(sourceMode: SourceMode): OcrLanguage[] {
-  if (sourceMode === 'en') return ['eng'];
-  if (sourceMode === 'ru') return ['rus'];
-  return ['eng', 'rus'];
-}
-
-function trackedPreparation(sourceMode: SourceMode, onProgress?: (percent: number) => void): Promise<PreparationOutcome> {
+function trackedPreparation(sourceMode: SourceMode, targetLanguage: TargetLanguage, onProgress?: (percent: number) => void): Promise<PreparationOutcome> {
   // This call must stay synchronous with the user's pointer/click activation.
-  return engine.prepareForMode(sourceMode, { onProgress })
+  return engine.prepareForMode(sourceMode, { onProgress }, targetLanguage)
     .then(() => ({ ok: true as const }))
     .catch((error: unknown) => ({ ok: false as const, error }));
 }
@@ -412,7 +409,7 @@ function showRecognizedTranslationError(
   view.status.replaceChildren(document.createTextNode(message));
   const retry = makeButton(buttonLabel, 'pt-button pt-button--primary');
   retry.addEventListener('click', () => {
-    const preparation = trackedPreparation(operation.sourceMode, (percent) => {
+    const preparation = trackedPreparation(operation.sourceMode, operation.targetLanguage, (percent) => {
       const label = view.status.querySelector('span:last-child');
       if (label) label.textContent = `Загружаю языковой пакет: ${percent}%`;
     });
@@ -457,7 +454,7 @@ async function renderRecognizedTranslation(
     const prepared = await preparation;
     if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
     if (!prepared.ok) throw prepared.error;
-    result = await engine.translate(text, operation.sourceMode);
+    result = await engine.translate(text, operation.sourceMode, {}, operation.targetLanguage);
   } catch (error) {
     if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
     throw error;
@@ -466,7 +463,7 @@ async function renderRecognizedTranslation(
 
   view.status.hidden = true;
   view.translation.hidden = false;
-  view.translation.textContent = result.alreadyRussian ? 'Текст уже на русском' : result.translation;
+  view.translation.textContent = result.alreadyTarget ? 'Текст уже на выбранном языке' : result.translation;
   const copy = makeButton('Копировать');
   copy.addEventListener('click', () => {
     void navigator.clipboard.writeText(result.translation)
@@ -485,7 +482,7 @@ async function renderRecognizedTranslation(
   });
   const translateAgain = makeButton('Перевести изменения');
   translateAgain.addEventListener('click', () => {
-    const nextPreparation = trackedPreparation(operation.sourceMode, (percent) => {
+    const nextPreparation = trackedPreparation(operation.sourceMode, operation.targetLanguage, (percent) => {
       const label = view.status.querySelector('span:last-child');
       if (label) label.textContent = `Загружаю языковой пакет: ${percent}%`;
     });
@@ -640,11 +637,13 @@ function startRegionSelection(): void {
       return;
     }
     const sourceMode = settings.sourceMode;
+    const targetLanguage = settings.targetLanguage;
     const requestId = createRequestId();
     const operation: RegionOperation = {
       requestId,
       sourceMode,
-      preparation: trackedPreparation(sourceMode),
+      targetLanguage,
+      preparation: trackedPreparation(sourceMode, targetLanguage),
     };
     regionOperation = operation;
     removeRegionOverlay(false);
@@ -814,7 +813,15 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
         respond({ ok: true, data: pageStatus });
         return false;
       case 'SHOW_SELECTION_TRANSLATOR':
-        void showTranslationCard(message.text, undefined, 'context-menu', false, message.requestId, message.sourceMode)
+        void showTranslationCard(
+          message.text,
+          undefined,
+          'context-menu',
+          false,
+          message.requestId,
+          message.sourceMode,
+          message.targetLanguage,
+        )
           .then(() => respond({ ok: true, data: pageStatus }))
           .catch((error) => respond({ ok: false, error: String(error) }));
         return true;

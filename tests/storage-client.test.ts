@@ -56,6 +56,9 @@ describe('StorageClient', () => {
       ...envelope, operation: 'updateSettings', payload: { pageTargetLanguage: 'en' },
     })).toBe(true);
     expect(isStorageMutationMessage({
+      ...envelope, operation: 'updateSettings', payload: { sourceMode: 'de', targetLanguage: 'ru' },
+    })).toBe(true);
+    expect(isStorageMutationMessage({
       ...envelope,
       operation: 'removeHistoryEntry',
       payload: 42,

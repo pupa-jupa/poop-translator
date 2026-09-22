@@ -6,9 +6,10 @@
     <title>PDF · poop translator</title>
     <script type="module" crossorigin src="/assets/pdf.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-B5Qt9EMX.js">
-    <link rel="modulepreload" crossorigin href="/assets/translator-VgFvE-8-.js">
+    <link rel="modulepreload" crossorigin href="/assets/languages-D6_hPaBp.js">
+    <link rel="modulepreload" crossorigin href="/assets/translator-Dq9POm8-.js">
     <link rel="modulepreload" crossorigin href="/assets/tesseract-engine-BEoqhUa3.js">
-    <link rel="stylesheet" crossorigin href="/assets/pdf-CLDk725E.css">
+    <link rel="stylesheet" crossorigin href="/assets/pdf-BRTcjH-z.css">
   </head>
   <body>
     <main class="pdf-app">
@@ -21,6 +22,9 @@
         <input id="pdf-file" type="file" accept="application/pdf,.pdf" hidden />
         <div class="upload-icon" aria-hidden="true">PDF</div>
         <div><h2>Выберите PDF</h2><p>Текстовый документ или скан · до 20 МБ и 50 страниц</p></div>
+        <label>Язык скана
+          <select data-ocr-language aria-label="Язык OCR для страниц-сканов"><option value="auto">Авто EN/RU</option><option value="eng">Английский</option><option value="rus">Русский</option><option value="ukr">Украинский</option><option value="deu">Немецкий</option><option value="fra">Французский</option><option value="spa">Испанский</option></select>
+        </label>
         <button class="button button--accent" type="button" data-action="choose-file">Выбрать файл</button>
       </section>
 

@@ -105,7 +105,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     requestId: createRequestId(),
     text: info.selectionText.trim(),
     source: 'context-menu',
-    sourceMode: info.menuItemId === MENU_EN_ID ? 'ru' : 'en',
+    sourceMode: 'auto',
+    targetLanguage: info.menuItemId === MENU_EN_ID ? 'en' : 'ru',
   }).catch(() => undefined);
 });
 

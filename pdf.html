@@ -16,6 +16,9 @@
         <input id="pdf-file" type="file" accept="application/pdf,.pdf" hidden />
         <div class="upload-icon" aria-hidden="true">PDF</div>
         <div><h2>Выберите PDF</h2><p>Текстовый документ или скан · до 20 МБ и 50 страниц</p></div>
+        <label>Язык скана
+          <select data-ocr-language aria-label="Язык OCR для страниц-сканов"><option value="auto">Авто EN/RU</option><option value="eng">Английский</option><option value="rus">Русский</option><option value="ukr">Украинский</option><option value="deu">Немецкий</option><option value="fra">Французский</option><option value="spa">Испанский</option></select>
+        </label>
         <button class="button button--accent" type="button" data-action="choose-file">Выбрать файл</button>
       </section>
 

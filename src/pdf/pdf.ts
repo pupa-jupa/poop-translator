@@ -12,7 +12,7 @@ import {
 import { splitText } from '../core/page-translation';
 import { ChromeTranslator } from '../core/translator';
 import { recognizeCanvas } from '../ocr/tesseract-engine';
-import type { PageTargetLanguage } from '../shared/types';
+import type { OcrLanguage, PageTargetLanguage } from '../shared/types';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -27,6 +27,7 @@ const pagesRoot = document.querySelector<HTMLElement>('[data-pages]')!;
 const fileName = document.querySelector<HTMLElement>('[data-file-name]')!;
 const fileMeta = document.querySelector<HTMLElement>('[data-file-meta]')!;
 const targetSelect = document.querySelector<HTMLSelectElement>('[data-target-language]')!;
+const ocrSelect = document.querySelector<HTMLSelectElement>('[data-ocr-language]')!;
 const translateButton = document.querySelector<HTMLButtonElement>('[data-action="translate"]')!;
 const cancelButton = document.querySelector<HTMLButtonElement>('[data-action="cancel"]')!;
 const downloadButton = document.querySelector<HTMLButtonElement>('[data-action="download"]')!;
@@ -91,7 +92,7 @@ async function renderPageForOcr(page: PDFPageProxy): Promise<HTMLCanvasElement> 
   return canvas;
 }
 
-async function extractPage(page: PDFPageProxy): Promise<Omit<LoadedPage, 'number' | 'translation'>> {
+async function extractPage(page: PDFPageProxy, ocrLanguages: OcrLanguage[]): Promise<Omit<LoadedPage, 'number' | 'translation'>> {
   const reader = page.streamTextContent().getReader();
   let text = '';
   try {
@@ -111,7 +112,7 @@ async function extractPage(page: PDFPageProxy): Promise<Omit<LoadedPage, 'number
   if (text) return { original: text, source: 'text' };
   const canvas = await renderPageForOcr(page);
   try {
-    const recognized = await recognizeCanvas(canvas, ['eng', 'rus']);
+    const recognized = await recognizeCanvas(canvas, ocrLanguages);
     if (!recognized.text) throw new Error('На странице нет распознаваемого текста.');
     return { original: recognized.text, source: 'ocr' };
   } finally {
@@ -129,6 +130,9 @@ async function loadPdf(file: File): Promise<void> {
   try {
     setError();
     validatePdfInput(file);
+    const ocrLanguages: OcrLanguage[] = ocrSelect.value === 'auto'
+      ? ['eng', 'rus']
+      : [ocrSelect.value as OcrLanguage];
     setStatus('Открываю PDF на устройстве…');
     translateButton.disabled = true;
     cancelButton.hidden = true;
@@ -150,7 +154,7 @@ async function loadPdf(file: File): Promise<void> {
       if (generation !== documentGeneration) return;
       setStatus(`Читаю страницу ${index} из ${nextDocument.numPages}…`);
       const page = await nextDocument.getPage(index);
-      const extracted = await extractPage(page);
+      const extracted = await extractPage(page, ocrLanguages);
       if (generation !== documentGeneration) return;
       totalCharacters = validatePdfTextBudget(totalCharacters, extracted.original.length);
       nextPages.push({ number: index, translation: '', ...extracted });
