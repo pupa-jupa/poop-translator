@@ -1,7 +1,8 @@
 import contentStyles from './content.css?inline';
 import { lookupAlternativeVariants } from './core/dictionary-client';
 import { clampFloatingCardPosition, moveFloatingCardByKey, placeFloatingCard } from './core/floating-card';
-import { PageTranslationSession, findMainContent } from './core/page-translation';
+import { PageTranslationSession, collectTextNodes, findMainContent } from './core/page-translation';
+import { detectDocumentSource, prepareDocumentPair, shouldTranslateDocumentPart, type DocumentPairActivation } from './core/document-language';
 import { normalizeRegionSelection } from './core/region-capture';
 import { STORAGE_KEY } from './core/storage';
 import { getStorageClient } from './core/storage-client';
@@ -223,7 +224,7 @@ function cardShell(original: string, rect?: DOMRect): {
     <div class="pt-status" role="status" aria-live="polite"><span class="pt-spinner"></span><span>Запускаю локальный перевод…</span></div>
     <p class="pt-copy pt-translation" hidden></p>
     <section class="pt-variants" aria-label="Варианты перевода" hidden>
-      <div class="pt-variants__head"><span>Другие значения</span><small>без ранжирования по контексту</small></div>
+      <div class="pt-variants__head"><span>Другие значения</span><small>Локальный словарь · без ранжирования по контексту</small></div>
       <div class="pt-variants__list"></div>
     </section>
     <div class="pt-actions"></div>`;
@@ -543,8 +544,9 @@ async function renderRecognizedTranslation(
   requestId: string,
   readyResult?: TranslationResult,
 ): Promise<void> {
-  const generation = ++view.translationGeneration;
   const text = editor.value.trim();
+  if (readyResult && readyResult.original !== text) return;
+  const generation = ++view.translationGeneration;
   if (!text) {
     showRecognizedTranslationError(operation, view, editor, 'Введите текст для перевода.');
     editor.focus();
@@ -563,7 +565,7 @@ async function renderRecognizedTranslation(
   let result: TranslationResult;
   try {
     const prepared = await preparation;
-    if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
+    if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation || editor.value.trim() !== text) return;
     if (!prepared.ok) throw prepared.error;
     if (readyResult) {
       result = readyResult;
@@ -574,7 +576,7 @@ async function renderRecognizedTranslation(
         operation.sourceMode,
         operation.targetLanguage,
       );
-      if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
+      if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation || editor.value.trim() !== text) return;
       if (attempt.status === 'needs-activation') {
         view.status.dataset.kind = '';
         view.status.textContent = `Определён язык: ${languageDefinition(attempt.sourceLanguage).name}.`;
@@ -583,14 +585,14 @@ async function renderRecognizedTranslation(
           const pending = attempt.activate({
             onProgress(percent) { view.status.textContent = `Загружаю языковой пакет: ${percent}%`; },
           });
-          void pending.then((translated) => renderRecognizedTranslation(
-            operation, view, editor, Promise.resolve({ ok: true }), requestId, translated,
-          )).catch((error) => showRecognizedTranslationError(
-            operation,
-            view,
-            editor,
-            error instanceof Error ? error.message : 'Не удалось подготовить переводчик.',
-          ));
+          void pending.then((translated) => {
+            if (view.translationGeneration !== generation || editor.value.trim() !== text) return;
+            return renderRecognizedTranslation(operation, view, editor, Promise.resolve({ ok: true }), requestId, translated);
+          }).catch((error) => {
+            if (view.translationGeneration !== generation || editor.value.trim() !== text) return;
+            showRecognizedTranslationError(operation, view, editor,
+              error instanceof Error ? error.message : 'Не удалось подготовить переводчик.');
+          });
         });
         view.actions.replaceChildren(activate);
         positionCardElement(view.element);
@@ -602,7 +604,7 @@ async function renderRecognizedTranslation(
     if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
     throw error;
   }
-  if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation) return;
+  if (regionOperation !== operation || !view.element.isConnected || view.translationGeneration !== generation || editor.value.trim() !== text) return;
 
   view.status.hidden = true;
   view.translation.hidden = false;
@@ -674,6 +676,14 @@ async function recognizeSelectedRegion(
     editor.setAttribute('aria-label', 'Распознанный текст');
     editor.maxLength = 10_000;
     editor.value = response.data.text.slice(0, 10_000);
+    editor.addEventListener('input', () => {
+      view.translationGeneration += 1;
+      view.variantGeneration += 1;
+      view.translation.hidden = true;
+      view.variants.hidden = true;
+      view.variantsList.replaceChildren();
+      showRecognizedTranslationError(operation, view, editor, 'Текст изменён. Переведите исправленный вариант.', 'Перевести изменения');
+    });
     view.original.replaceWith(editor);
     view.status.hidden = false;
     view.status.dataset.kind = '';
@@ -807,7 +817,7 @@ function dismissPagePrompt(): void {
   pagePrompt = undefined;
 }
 
-function showPagePrompt(targetLanguage: PageTargetLanguage): void {
+function showPagePrompt(targetLanguage: PageTargetLanguage, sourceMode: SourceMode = 'auto'): void {
   const operationId = ++pageOperationId;
   pageAbort?.abort();
   pageSession.restore();
@@ -816,7 +826,7 @@ function showPagePrompt(targetLanguage: PageTargetLanguage): void {
   prompt.className = 'pt-page-prompt';
   prompt.innerHTML = `
     <span class="pt-card-mark">${poopSvg}</span>
-    <div><strong>Перевести страницу на ${languageDefinition(targetLanguage).toName}?</strong><span>Язык фрагментов определится локально. Для новой пары может потребоваться ещё одно нажатие.</span></div>
+    <div><strong>Перевести страницу на ${languageDefinition(targetLanguage).toName}?</strong><span>${sourceMode === 'auto' ? 'Язык страницы определится локально.' : `Исходный язык: ${languageDefinition(sourceMode).name}.`} Для новой пары может потребоваться ещё одно нажатие.</span></div>
     <div class="pt-page-prompt__buttons"></div>`;
   const buttons = prompt.querySelector<HTMLDivElement>('.pt-page-prompt__buttons')!;
   const cancel = makeButton('Не сейчас');
@@ -831,15 +841,18 @@ function showPagePrompt(targetLanguage: PageTargetLanguage): void {
     pageSession = session;
     pageAbort = controller;
     // Start model creation before the first await to preserve activation.
-    const preparation = engine.prepareForPageTarget(targetLanguage, {
+    const preparation = sourceMode === 'auto' ? engine.prepareForPageTarget(targetLanguage, {
       onProgress(percent) {
         if (operationId === pageOperationId) {
           setPageStatus({ state: 'translating', completed: percent, total: 100 });
         }
       },
-    });
+    }) : Promise.all([
+      engine.prepareForMode(sourceMode, {}, targetLanguage),
+      engine.prepareForPageTarget(targetLanguage),
+    ]).then(() => undefined);
     dismissPagePrompt();
-    void runPageTranslation(targetLanguage, preparation, operationId, session, controller);
+    void runPageTranslation(targetLanguage, sourceMode, preparation, operationId, session, controller);
   });
   buttons.append(cancel, start);
   ensureLayer().append(prompt);
@@ -849,6 +862,7 @@ function showPagePrompt(targetLanguage: PageTargetLanguage): void {
 
 async function runPageTranslation(
   targetLanguage: PageTargetLanguage,
+  sourceMode: SourceMode,
   preparation: Promise<void>,
   operationId: number,
   session: PageTranslationSession,
@@ -858,14 +872,21 @@ async function runPageTranslation(
   try {
     await preparation;
     if (operationId !== pageOperationId || controller.signal.aborted) return;
+    const root = findMainContent();
+    const sourceLanguage = sourceMode === 'auto'
+      ? (await detectDocumentSource(engine, collectTextNodes(root).map((node) => node.data), targetLanguage)).sourceLanguage
+      : sourceMode;
+    if (operationId !== pageOperationId || controller.signal.aborted) return;
+    const pairActivation = await prepareDocumentPair(engine, sourceLanguage, targetLanguage);
+    if (operationId !== pageOperationId || controller.signal.aborted) return;
+    if (pairActivation) await requestPagePairActivation(pairActivation, operationId, controller.signal);
     const summary = await session.translate(
-      findMainContent(),
+      root,
       async (text) => {
-        const attempt = await beginTranslationFromUserActivation(engine, text, 'auto', targetLanguage);
+        const shouldTranslate = await shouldTranslateDocumentPart(engine, text, sourceLanguage, targetLanguage, sourceMode === 'auto');
         if (controller.signal.aborted || operationId !== pageOperationId) throw new DOMException('Операция отменена', 'AbortError');
-        const result = attempt.status === 'translated'
-          ? attempt.result
-          : await requestPagePairActivation(attempt, operationId, controller.signal);
+        if (!shouldTranslate) return text;
+        const result = await engine.translate(text, sourceLanguage, {}, targetLanguage);
         return result.translation;
       },
       (completed, total) => {
@@ -894,10 +915,10 @@ async function runPageTranslation(
 }
 
 function requestPagePairActivation(
-  attempt: Extract<TranslationAttempt, { status: 'needs-activation' }>,
+  attempt: DocumentPairActivation,
   operationId: number,
   signal: AbortSignal,
-): Promise<TranslationResult> {
+): Promise<void> {
   if (signal.aborted) return Promise.reject(new DOMException('Операция отменена', 'AbortError'));
   return new Promise((resolve, reject) => {
     const prompt = document.createElement('div');
@@ -1020,7 +1041,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
           .catch((error) => respond({ ok: false, error: String(error) }));
         return true;
       case 'TRANSLATE_PAGE':
-        showPagePrompt(message.targetLanguage);
+        showPagePrompt(message.targetLanguage, message.sourceMode);
         respond({ ok: true, data: pageStatus });
         return false;
       case 'RESTORE_PAGE':

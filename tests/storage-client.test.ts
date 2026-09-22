@@ -91,6 +91,9 @@ describe('StorageClient', () => {
     expect(isStorageMutationMessage({
       ...envelope, operation: 'importBackup', payload: { format: 'poop-translator-backup', version: 2, data: {} },
     })).toBe(true);
+    expect(isStorageMutationMessage({
+      ...envelope, operation: 'importBackup', payload: { format: 'poop-translator-backup', version: 4, data: {} },
+    })).toBe(true);
   });
 
   it('reports a rated card only after the storage coordinator succeeds', async () => {

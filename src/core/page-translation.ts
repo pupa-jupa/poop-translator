@@ -1,3 +1,5 @@
+import { MixedDocumentLanguageError } from './document-language';
+
 const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
@@ -146,6 +148,7 @@ export class PageTranslationSession {
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') throw error;
+        if (error instanceof MixedDocumentLanguageError) throw error;
         failed += 1;
       }
       completed += 1;

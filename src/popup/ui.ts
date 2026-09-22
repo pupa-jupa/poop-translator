@@ -102,7 +102,7 @@ export function mountPopupShell(root: HTMLElement): void {
             <div class="result-divider"></div>
             <p class="result-translation" data-result-translation></p>
             <section class="result-variants" data-result-variants aria-label="Варианты перевода" hidden>
-              <div class="result-variants__head"><span>Другие значения</span><small>без ранжирования по контексту</small></div>
+              <div class="result-variants__head"><span>Другие значения</span><small>Локальный словарь · без ранжирования по контексту</small></div>
               <div class="result-variants__list" data-result-variants-list></div>
             </section>
             <div class="result-actions">
@@ -116,6 +116,7 @@ export function mountPopupShell(root: HTMLElement): void {
           <section class="page-tools">
             <div><span class="section-kicker">Вся страница</span><p data-page-status aria-live="polite">Переведу основной текст, сохранив кнопки и ссылки.</p></div>
             <div class="page-actions">
+              <label class="page-target"><span>Исходный язык</span><select data-control="page-source-language" data-language-source aria-label="Исходный язык страницы"></select></label>
               <label class="page-target"><span>Язык страницы</span><select data-control="page-target-language" data-language-target="page" aria-label="Перевести страницу на"></select></label>
               <button class="button button--soft" type="button" data-action="translate-page">Перевести страницу</button>
               <button class="icon-button" type="button" aria-label="Вернуть оригинал" title="Вернуть оригинал" data-action="restore-page">↶</button>

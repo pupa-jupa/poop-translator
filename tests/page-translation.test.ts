@@ -4,6 +4,7 @@ import {
   collectTextNodes,
   splitText,
 } from '../src/core/page-translation';
+import { MixedDocumentLanguageError } from '../src/core/document-language';
 
 describe('page translation helpers', () => {
   it('collects readable content and skips code, forms, hidden and extension UI', () => {
@@ -32,6 +33,13 @@ describe('page translation helpers', () => {
 });
 
 describe('PageTranslationSession', () => {
+  it('surfaces a mixed-source document instead of silently counting the node as failed', async () => {
+    document.body.innerHTML = '<main><p>English text.</p></main>';
+    const session = new PageTranslationSession();
+    await expect(session.translate(document.querySelector('main')!, async () => {
+      throw new MixedDocumentLanguageError();
+    })).rejects.toThrow('Выберите исходный язык явно');
+  });
   it('does not rewrite or snapshot text already on the target language', async () => {
     document.body.innerHTML = '<main><p>  Уже по-русски   здесь.  </p></main>';
     const node = document.querySelector('p')!.firstChild as Text;

@@ -7,7 +7,7 @@
     <script type="module" crossorigin src="/assets/pdf.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-B5Qt9EMX.js">
     <link rel="modulepreload" crossorigin href="/assets/languages-B0I-592T.js">
-    <link rel="modulepreload" crossorigin href="/assets/user-activated-translation-BZ79dQV2.js">
+    <link rel="modulepreload" crossorigin href="/assets/translator-BPPl5idG.js">
     <link rel="modulepreload" crossorigin href="/assets/tesseract-engine-Dd58A1_l.js">
     <link rel="stylesheet" crossorigin href="/assets/pdf-Uu6MYkQq.css">
   </head>
@@ -34,6 +34,9 @@
       <section class="workspace" data-workspace hidden>
         <div class="toolbar">
           <div class="file-meta"><strong data-file-name></strong><span data-file-meta></span></div>
+          <label>Исходный язык
+            <select data-source-language aria-label="Исходный язык PDF"><option value="auto">Определить автоматически</option></select>
+          </label>
           <label>Перевести документ
             <select data-target-language aria-label="Язык перевода PDF"><option value="ru">На русский</option><option value="en">На английский</option></select>
           </label>

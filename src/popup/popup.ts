@@ -44,6 +44,8 @@ const targetLanguage = required<HTMLSelectElement>('[data-control="target-langua
 const settingsTargetLanguage = required<HTMLSelectElement>('[data-control="settings-target-language"]');
 const settingsOcrMode = required<HTMLSelectElement>('[data-control="settings-ocr-mode"]');
 const pageTargetLanguage = required<HTMLSelectElement>('[data-control="page-target-language"]');
+const pageSourceLanguage = required<HTMLSelectElement>('[data-control="page-source-language"]');
+pageSourceLanguage.value = 'auto';
 const saveHistory = required<HTMLInputElement>('[data-control="save-history"]');
 const selectionButtonSetting = required<HTMLInputElement>('[data-control="selection-button"]');
 const textScale = required<HTMLSelectElement>('[data-control="text-scale"]');
@@ -87,6 +89,18 @@ function showToast(message: string): void {
 function setBusy(busy: boolean, label = 'Перевести'): void {
   translateButton.disabled = busy;
   translateButton.querySelector('span')!.textContent = busy ? 'Перевожу…' : label;
+}
+
+function invalidateManualTranslation(): void {
+  translationOperation += 1;
+  pendingTranslationActivation = undefined;
+  translationBusy = false;
+  setBusy(false);
+  latestResult = undefined;
+  resultCard.hidden = true;
+  resultVariants.hidden = true;
+  resultVariantsList.replaceChildren();
+  translateError.hidden = true;
 }
 
 function syncSettingsControls(): void {
@@ -375,10 +389,7 @@ async function updateTargetLanguage(target: TargetLanguage): Promise<void> {
 }
 
 async function persistLanguageSettings(mode: SourceMode, target: TargetLanguage): Promise<void> {
-  if (pendingTranslationActivation) {
-    pendingTranslationActivation = undefined;
-    setBusy(false);
-  }
+  invalidateManualTranslation();
   const operation = ++languageSettingsOperation;
   stateRefreshVersion += 1;
   state = {
@@ -546,10 +557,7 @@ root.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach((tab) => {
 });
 
 sourceText.addEventListener('input', () => {
-  if (pendingTranslationActivation) {
-    pendingTranslationActivation = undefined;
-    setBusy(false);
-  }
+  invalidateManualTranslation();
   charCount.textContent = `${sourceText.value.length.toLocaleString('ru-RU')} / 10 000`;
 });
 sourceText.addEventListener('keydown', (event) => {
@@ -730,6 +738,7 @@ importFile.addEventListener('change', () => void (async () => {
 required<HTMLButtonElement>('[data-action="translate-page"]').addEventListener('click', () => {
   void sendToActiveTab<PageStatus>({
     type: 'TRANSLATE_PAGE', requestId: createRequestId(), targetLanguage: pageTargetLanguage.value as TargetLanguage,
+    sourceMode: pageSourceLanguage.value as SourceMode,
   }).then((response) => {
     if (!response.ok || !response.data) throw new Error(response.error ?? 'Страница не ответила.');
     renderPageStatus(response.data);

@@ -189,6 +189,41 @@ describe('ChromeTranslator', () => {
     }));
   });
 
+  it('rejects an unavailable detected pair without trying to create it', async () => {
+    const translatorApi = fakeTranslatorApi({ availability: 'unavailable' });
+    const detectorApi = { availability: vi.fn(), create: vi.fn(async () => ({
+      detect: vi.fn(async () => [{ detectedLanguage: 'ja', confidence: 0.99 }]),
+    })) };
+    const engine = new ChromeTranslator({ Translator: translatorApi, LanguageDetector: detectorApi });
+
+    await expect(beginTranslationFromUserActivation(engine, 'これは日本語の文章です。', 'auto', 'ko'))
+      .rejects.toMatchObject({ code: 'PAIR_UNAVAILABLE' });
+    expect(translatorApi.create).not.toHaveBeenCalled();
+  });
+
+  it('names the actual pair when translator creation throws synchronously', async () => {
+    const engine = new ChromeTranslator({ Translator: {
+      availability: vi.fn(async () => 'available'),
+      create: vi.fn(() => { throw new DOMException('Unsupported', 'NotSupportedError'); }),
+    } });
+
+    await expect(engine.translate('これは日本語です', 'ja', {}, 'ko')).rejects.toMatchObject({
+      code: 'PAIR_UNAVAILABLE',
+      message: expect.stringContaining('японского'),
+    });
+  });
+
+  it('names the actual pair when translation fails after creation', async () => {
+    const engine = new ChromeTranslator({ Translator: {
+      availability: vi.fn(async () => 'available'),
+      create: vi.fn(async () => ({ translate: vi.fn(async () => { throw new DOMException('Unsupported', 'NotSupportedError'); }) })),
+    } });
+
+    await expect(engine.translate('これは日本語です', 'ja', {}, 'ko')).rejects.toMatchObject({
+      code: 'PAIR_UNAVAILABLE', message: expect.stringContaining('японского'),
+    });
+  });
+
   it('translates confidently detected Russian text to English in auto mode', async () => {
     const translatorApi = fakeTranslatorApi({ translated: 'Good afternoon' });
     const detectorApi = {

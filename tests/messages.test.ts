@@ -94,6 +94,8 @@ describe('runtime message protocol', () => {
   it('rejects malformed or unknown runtime messages', () => {
     expect(isContentRequest({ type: 'TRANSLATE_PAGE', targetLanguage: 'ru' })).toBe(false);
     expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', targetLanguage: 'fr' })).toBe(true);
+    expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', targetLanguage: 'fr', sourceMode: 'ja' })).toBe(true);
+    expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', targetLanguage: 'fr', sourceMode: 'xx' })).toBe(false);
     expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', targetLanguage: 'xx' })).toBe(false);
     expect(isContentRequest({ type: 'TRANSLATE_PAGE', requestId: 'pt-1', sourceMode: 'auto' })).toBe(false);
     expect(isContentRequest({ type: 'DELETE_EVERYTHING', requestId: 'pt-1' })).toBe(false);

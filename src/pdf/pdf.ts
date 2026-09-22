@@ -14,10 +14,10 @@ import {
 } from '../core/pdf';
 import { splitText } from '../core/page-translation';
 import { ChromeTranslator } from '../core/translator';
+import { detectDocumentSource, prepareDocumentPair, shouldTranslateDocumentPart, type DocumentPairActivation } from '../core/document-language';
 import { OCR_LANGUAGES, TRANSLATION_LANGUAGES, languageDefinition } from '../core/languages';
-import { beginTranslationFromUserActivation, type TranslationAttempt } from '../core/user-activated-translation';
 import { recognizeCanvas } from '../ocr/tesseract-engine';
-import type { OcrLanguage, PageTargetLanguage } from '../shared/types';
+import type { OcrLanguage, PageTargetLanguage, SourceMode } from '../shared/types';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -32,6 +32,7 @@ const pagesRoot = document.querySelector<HTMLElement>('[data-pages]')!;
 const fileName = document.querySelector<HTMLElement>('[data-file-name]')!;
 const fileMeta = document.querySelector<HTMLElement>('[data-file-meta]')!;
 const targetSelect = document.querySelector<HTMLSelectElement>('[data-target-language]')!;
+const sourceSelect = document.querySelector<HTMLSelectElement>('[data-source-language]')!;
 const ocrSelect = document.querySelector<HTMLSelectElement>('[data-ocr-language]')!;
 const translateButton = document.querySelector<HTMLButtonElement>('[data-action="translate"]')!;
 const preparePairButton = document.querySelector<HTMLButtonElement>('[data-action="prepare-pair"]')!;
@@ -44,6 +45,8 @@ ocrSelect.replaceChildren(
 );
 targetSelect.replaceChildren(...TRANSLATION_LANGUAGES.map((language) => new Option(`На ${language.toName}`, language.code)));
 targetSelect.value = 'ru';
+sourceSelect.replaceChildren(new Option('Определить автоматически', 'auto'),
+  ...TRANSLATION_LANGUAGES.map((language) => new Option(language.name, language.code)));
 let loadedPages: LoadedPage[] = [];
 let loadedName = '';
 let completedTarget: PageTargetLanguage | undefined;
@@ -245,9 +248,17 @@ async function loadPdf(file: File): Promise<void> {
   }
 }
 
-async function translatePdf(targetLanguage: PageTargetLanguage, generation: number, preparation: Promise<void>): Promise<void> {
+async function translatePdf(targetLanguage: PageTargetLanguage, sourceMode: SourceMode, generation: number, preparation: Promise<void>): Promise<void> {
   try {
     await preparation;
+    if (generation !== translationGeneration) return;
+    const sourceLanguage = sourceMode === 'auto'
+      ? (await detectDocumentSource(engine, loadedPages.map((page) => page.original), targetLanguage)).sourceLanguage
+      : sourceMode;
+    if (generation !== translationGeneration) return;
+    const pairActivation = await prepareDocumentPair(engine, sourceLanguage, targetLanguage);
+    if (generation !== translationGeneration) return;
+    if (pairActivation) await requestPdfPairActivation(pairActivation, generation);
     for (let pageIndex = 0; pageIndex < loadedPages.length; pageIndex += 1) {
       const page = loadedPages[pageIndex];
       if (!page || generation !== translationGeneration) return;
@@ -256,11 +267,11 @@ async function translatePdf(targetLanguage: PageTargetLanguage, generation: numb
       for (let index = 0; index < chunks.length; index += 1) {
         if (generation !== translationGeneration) return;
         setStatus(`Перевожу страницу ${page.number} из ${loadedPages.length} · фрагмент ${index + 1} из ${chunks.length}`);
-        const attempt = await beginTranslationFromUserActivation(engine, chunks[index]!, 'auto', targetLanguage);
+        const chunk = chunks[index]!;
+        const shouldTranslate = await shouldTranslateDocumentPart(engine, chunk, sourceLanguage, targetLanguage, sourceMode === 'auto');
         if (generation !== translationGeneration) return;
-        const result = attempt.status === 'translated'
-          ? attempt.result
-          : await requestPdfPairActivation(attempt, generation);
+        if (!shouldTranslate) { translations.push(chunk); continue; }
+        const result = await engine.translate(chunk, sourceLanguage, {}, targetLanguage);
         if (generation !== translationGeneration) return;
         translations.push(result.translation);
       }
@@ -286,9 +297,9 @@ async function translatePdf(targetLanguage: PageTargetLanguage, generation: numb
 }
 
 function requestPdfPairActivation(
-  attempt: Extract<TranslationAttempt, { status: 'needs-activation' }>,
+  attempt: DocumentPairActivation,
   generation: number,
-): Promise<Awaited<ReturnType<typeof attempt.activate>>> {
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const source = languageDefinition(attempt.sourceLanguage).fromName;
     const target = languageDefinition(attempt.targetLanguage).toName;
@@ -336,6 +347,7 @@ translateButton.addEventListener('click', () => {
   if (!loadedPages.length) return;
   const generation = ++translationGeneration;
   const target = targetSelect.value as PageTargetLanguage;
+  const sourceMode = sourceSelect.value as SourceMode;
   setError();
   translateButton.disabled = true;
   cancelButton.hidden = false;
@@ -344,10 +356,15 @@ translateButton.addEventListener('click', () => {
   for (const page of loadedPages) page.translation = '';
   renderPages();
   // Must be invoked synchronously from this click for Chrome's transient activation.
-  const preparation = engine.prepareForPageTarget(target, {
+  const preparation = sourceMode === 'auto' ? engine.prepareForPageTarget(target, {
     onProgress(percent) { if (generation === translationGeneration) setStatus(`Загружаю языковой пакет: ${percent}%`); },
-  });
-  void translatePdf(target, generation, preparation);
+  }) : Promise.all([
+    engine.prepareForMode(sourceMode, {
+      onProgress(percent) { if (generation === translationGeneration) setStatus(`Загружаю языковой пакет: ${percent}%`); },
+    }, target),
+    engine.prepareForPageTarget(target),
+  ]).then(() => undefined);
+  void translatePdf(target, sourceMode, generation, preparation);
 });
 
 cancelButton.addEventListener('click', () => {

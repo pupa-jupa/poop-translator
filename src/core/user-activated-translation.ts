@@ -1,5 +1,7 @@
 import type { LanguageCode, SourceMode, TargetLanguage, TranslationResult } from '../shared/types';
 import type { ChromeTranslator, TranslationCallbacks } from './translator';
+import { TranslationEngineError } from './translator';
+import { languageDefinition } from './languages';
 
 type UserActivatedEngine = Pick<ChromeTranslator, 'detectSourceLanguage' | 'getAvailability' | 'translate'>;
 
@@ -46,6 +48,12 @@ export function beginTranslationFromUserActivation(
     }
 
     const availability = await engine.getAvailability(sourceLanguage, resolvedTarget);
+    if (availability === 'unavailable') {
+      throw new TranslationEngineError(
+        'PAIR_UNAVAILABLE',
+        `Перевод с ${languageDefinition(sourceLanguage).fromName} на ${languageDefinition(resolvedTarget).toName} недоступен в этом Chrome.`,
+      );
+    }
     if (availability === 'downloadable' || availability === 'downloading') {
       return {
         status: 'needs-activation',

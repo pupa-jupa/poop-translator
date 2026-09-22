@@ -101,7 +101,7 @@ function hasValidPayload(operation: StorageMutationOperation, payload: unknown):
     case 'importBackup':
       return isRecord(payload)
         && payload.format === 'poop-translator-backup'
-        && (payload.version === 1 || payload.version === 2 || payload.version === 3)
+        && (payload.version === 1 || payload.version === 2 || payload.version === 3 || payload.version === 4)
         && isRecord(payload.data);
     case 'clearHistory':
     case 'clearDictionary':

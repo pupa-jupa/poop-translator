@@ -150,15 +150,20 @@ export class ChromeTranslator {
 
     // `create()` must start in the same task as the user's click. An awaited
     // availability probe here would consume Chrome's transient activation.
-    const modelCreation = api.create({
-      sourceLanguage,
-      targetLanguage,
-      monitor(monitor) {
-        monitor.addEventListener('downloadprogress', (event) => {
-          callbacks.onProgress?.(Math.round(Math.max(0, Math.min(1, event.loaded)) * 100));
-        });
-      },
-    });
+    let modelCreation: Promise<TranslatorInstanceLike>;
+    try {
+      modelCreation = api.create({
+        sourceLanguage,
+        targetLanguage,
+        monitor(monitor) {
+          monitor.addEventListener('downloadprogress', (event) => {
+            callbacks.onProgress?.(Math.round(Math.max(0, Math.min(1, event.loaded)) * 100));
+          });
+        },
+      });
+    } catch (error) {
+      return Promise.reject(messageForCreationError(error, sourceLanguage, targetLanguage));
+    }
     const creation = this.withCreationTimeout(modelCreation).catch((error) => {
       this.translators.delete(pair);
       throw messageForCreationError(error, sourceLanguage, targetLanguage);
@@ -276,11 +281,13 @@ export class ChromeTranslator {
       );
     }
 
+    let sourceLanguage: LanguageCode | undefined;
+    let resolvedTarget: TargetLanguage | undefined;
     try {
-      const sourceLanguage: LanguageCode = sourceMode === 'auto'
+      sourceLanguage = sourceMode === 'auto'
         ? await this.detectSourceLanguage(original, callbacks)
         : sourceMode;
-      const resolvedTarget = targetLanguage ?? (sourceLanguage === 'ru' ? 'en' : 'ru');
+      resolvedTarget = targetLanguage ?? (sourceLanguage === 'ru' ? 'en' : 'ru');
       if (sourceLanguage === resolvedTarget) {
         return { original, translation: original, sourceLanguage, targetLanguage: resolvedTarget, alreadyTarget: true };
       }
@@ -289,7 +296,7 @@ export class ChromeTranslator {
       if (!translation) throw new Error('Empty translation');
       return { original, translation, sourceLanguage, targetLanguage: resolvedTarget, alreadyTarget: false };
     } catch (error) {
-      throw messageForCreationError(error);
+      throw messageForCreationError(error, sourceLanguage, resolvedTarget);
     }
   }
 

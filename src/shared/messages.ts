@@ -14,7 +14,7 @@ export type ContentRequest =
   | { type: 'SHOW_SELECTION_TRANSLATOR'; requestId: string; text: string; source: Extract<TranslationSource, 'context-menu'>; sourceMode: SourceMode; targetLanguage: TargetLanguage }
   | { type: 'START_REGION_SELECTION'; requestId: string }
   | { type: 'REGION_OCR_STARTED'; requestId: string }
-  | { type: 'TRANSLATE_PAGE'; requestId: string; targetLanguage: PageTargetLanguage }
+  | { type: 'TRANSLATE_PAGE'; requestId: string; targetLanguage: PageTargetLanguage; sourceMode?: SourceMode }
   | { type: 'RESTORE_PAGE'; requestId: string }
   | { type: 'GET_PAGE_STATUS'; requestId: string };
 
@@ -65,7 +65,8 @@ export function isContentRequest(value: unknown): value is ContentRequest {
         && isSourceMode(value.sourceMode)
         && isTargetLanguage(value.targetLanguage);
     case 'TRANSLATE_PAGE':
-      return isTargetLanguage(value.targetLanguage);
+      return isTargetLanguage(value.targetLanguage)
+        && (value.sourceMode === undefined || isSourceMode(value.sourceMode));
     case 'START_REGION_SELECTION':
     case 'REGION_OCR_STARTED':
     case 'RESTORE_PAGE':

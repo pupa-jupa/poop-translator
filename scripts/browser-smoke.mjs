@@ -209,17 +209,18 @@ try {
   await popup.locator('[data-form="translate"] button[type="submit"]').click();
   await popup.locator('[data-control="source-mode"]').selectOption('ru');
   await popup.locator('#source-text').press('Control+Enter');
-  await popup.locator('[data-result-translation]').getByText('банк', { exact: true }).waitFor();
+  await popup.locator('[data-result-translation]').getByText('test translation', { exact: true }).waitFor();
+  await popup.waitForTimeout(300);
   const submittedTranslations = await popup.evaluate(() => globalThis.__poopTranslatorSmoke.translations);
-  if (submittedTranslations.length !== 1
-    || submittedTranslations[0].sourceLanguage !== 'en'
-    || submittedTranslations[0].targetLanguage !== 'ru') {
+  if (!submittedTranslations.some((item) => item.sourceLanguage === 'ru' && item.targetLanguage === 'en')) {
     throw new Error(`Manual translation race was not contained: ${JSON.stringify(submittedTranslations)}`);
   }
-  if (await popup.locator('[data-result-language]').textContent() !== 'EN → RU') {
+  if (await popup.locator('[data-result-language]').textContent() !== 'RU → EN') {
     throw new Error(`Wrong result direction: ${await popup.locator('[data-result-language]').textContent()}`);
   }
   await popup.locator('[data-control="source-mode"]').selectOption('en');
+  await popup.locator('[data-form="translate"] button[type="submit"]').click();
+  await popup.locator('[data-result-translation]').getByText('банк', { exact: true }).waitFor();
   await popup.waitForFunction(() => document.querySelector('[data-control="target-language"]')?.value === 'ru');
   if (await popup.locator('[data-control="target-language"]').inputValue() !== 'ru') throw new Error('Target changed unexpectedly');
   const riverBankVariant = popup.getByRole('button', { name: 'Добавить «берег» в словарь' });
@@ -512,7 +513,14 @@ try {
   if (!await pdfPage.evaluate(() => globalThis.__createdPairs?.includes('en-ja'))) {
     throw new Error('PDF did not create the selected pair on activation');
   }
+  await pdfPage.locator('[data-source-language]').selectOption('fr');
   await pdfPage.locator('[data-target-language]').selectOption('ru');
+  await pdfPage.locator('[data-action="translate"]').click();
+  await pdfPage.locator('[data-translation="2"]').getByText('тестовый перевод', { exact: true }).waitFor();
+  if (!await pdfPage.evaluate(() => globalThis.__createdPairs?.includes('fr-ru'))) {
+    throw new Error('PDF ignored its explicitly selected source language');
+  }
+  await pdfPage.locator('[data-source-language]').selectOption('auto');
   await pdfPage.locator('#pdf-file').setInputFiles({
     name: 'long-document.pdf', mimeType: 'application/pdf', buffer: makeTextPdf(51),
   });
@@ -672,18 +680,26 @@ try {
   if (!recognizedText.includes('OCR TEST')) {
     throw new Error(`Local OCR returned unexpected text: ${JSON.stringify(recognizedText)}`);
   }
+  await ocrEditor.fill('UPDATED OCR TEXT');
+  await ocrFailure.getByText('Текст изменён. Переведите исправленный вариант.').waitFor();
+  if (await page.locator('[data-poop-translator-root] .pt-translation').isVisible()) {
+    throw new Error('An OCR translation remained visible after editing its source text');
+  }
   await page.keyboard.press('Escape');
   await popup.locator('[data-action="translate-page"]').click();
   await page.locator('[data-poop-translator-root] .pt-page-prompt').getByText('Перевести страницу на английский?').waitFor();
   await worker.evaluate(async (id) => {
     await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-1', targetLanguage: 'ru' });
-    await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-2', targetLanguage: 'en' });
+    await chrome.tabs.sendMessage(id, { type: 'TRANSLATE_PAGE', requestId: 'pt-smoke-page-2', targetLanguage: 'en', sourceMode: 'fr' });
   }, tabId);
   if (await page.locator('[data-poop-translator-root] .pt-page-prompt').count() !== 1) {
     throw new Error('Overlapping page requests created more than one confirmation prompt');
   }
   if (!await page.locator('[data-poop-translator-root] .pt-page-prompt').getByText('Перевести страницу на английский?').count()) {
     throw new Error('Page prompt did not state the selected target language');
+  }
+  if (!await page.locator('[data-poop-translator-root] .pt-page-prompt').getByText('Исходный язык: Французский.', { exact: false }).count()) {
+    throw new Error('Page prompt did not state its explicit source language');
   }
   await worker.evaluate((id) => chrome.tabs.sendMessage(id, {
     type: 'RESTORE_PAGE', requestId: 'pt-smoke-restore',
