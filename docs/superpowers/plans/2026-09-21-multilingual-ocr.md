@@ -17,4 +17,4 @@
 ## Task 3 — release
 
 - [x] Add focused migration, translator, message and browser coverage; update docs and version.
-- [ ] Run the complete verification matrix, update the installed folder, publish a stacked public PR and wait for CI.
+- [x] Run the complete verification matrix, update the installed folder, publish a stacked public PR and wait for CI.
