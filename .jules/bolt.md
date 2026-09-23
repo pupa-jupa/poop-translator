@@ -1,0 +1,3 @@
+## 2024-05-24 - Popup UI Render Performance
+**Learning:** The popup UI for this extension renders lists that can contain up to 500 items (like history entries). The original approach appended each newly created element directly to the DOM one-by-one inside a loop, which caused excessive layout recalculations and slowed down filtering significantly.
+**Action:** Use `DocumentFragment` to batch DOM operations. Construct the full list of elements on the fragment first, then append the fragment to the live DOM in one go. Also, remember to debounce input handlers that trigger re-rendering of large lists.

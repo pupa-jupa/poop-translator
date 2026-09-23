@@ -160,6 +160,10 @@ function renderHistory(): void {
       : 'Ваши ручные переводы и переводы выделений появятся здесь.'));
     return;
   }
+  // ⚡ Bolt: Use DocumentFragment for batch DOM insertion
+  // Reduces reflows by appending all cards at once instead of one-by-one.
+  // With up to 500 history items, this significantly improves render performance.
+  const fragment = document.createDocumentFragment();
   for (const entry of entries) {
     const card = document.createElement('article');
     card.className = 'item-card';
@@ -182,8 +186,9 @@ function renderHistory(): void {
         await refreshState();
       }),
     );
-    historyList.append(card);
+    fragment.append(card);
   }
+  historyList.append(fragment);
 }
 
 function openWordDialog(entry?: DictionaryEntry): void {
@@ -211,6 +216,10 @@ function renderDictionary(): void {
       : 'Добавляйте сюда полезные слова и фразы одним нажатием.'));
     return;
   }
+  // ⚡ Bolt: Use DocumentFragment for batch DOM insertion
+  // Reduces reflows by appending all dictionary entries at once.
+  // Improves search filter responsiveness when rendering many items.
+  const fragment = document.createDocumentFragment();
   for (const entry of entries) {
     const card = document.createElement('article');
     card.className = 'item-card';
@@ -228,8 +237,9 @@ function renderDictionary(): void {
         await refreshState();
       }),
     );
-    dictionaryList.append(card);
+    fragment.append(card);
   }
+  dictionaryList.append(fragment);
 }
 
 function renderReview(): void {
@@ -676,8 +686,17 @@ textScale.addEventListener('change', () => {
     .then(refreshState)
     .catch(() => showToast('Не удалось сохранить размер текста'));
 });
-historySearch.addEventListener('input', renderHistory);
-dictionarySearch.addEventListener('input', renderDictionary);
+// ⚡ Bolt: Debounce search inputs
+// Prevents rendering on every keystroke, which could freeze the UI when filtering hundreds of items.
+function debounce(func: () => void, delay = 150): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(func, delay);
+  };
+}
+historySearch.addEventListener('input', debounce(renderHistory));
+dictionarySearch.addEventListener('input', debounce(renderDictionary));
 
 required<HTMLButtonElement>('[data-action="copy-result"]').addEventListener('click', () => {
   if (!latestResult) return;
