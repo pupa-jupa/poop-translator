@@ -100,7 +100,7 @@ export function mountPopupShell(root: HTMLElement): void {
             <div class="result-head"><span>Результат</span><span data-result-language></span></div>
             <p class="result-original" data-result-original></p>
             <div class="result-divider"></div>
-            <p class="result-translation" data-result-translation></p>
+            <p class="result-translation" data-result-translation aria-live="polite"></p>
             <section class="result-variants" data-result-variants aria-label="Варианты перевода" hidden>
               <div class="result-variants__head"><span>Другие значения</span><small>Локальный словарь · без ранжирования по контексту</small></div>
               <div class="result-variants__list" data-result-variants-list></div>
