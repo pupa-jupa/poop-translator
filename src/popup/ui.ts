@@ -68,7 +68,7 @@ export function mountPopupShell(root: HTMLElement): void {
             <label>Исходный язык
               <select data-control="source-mode" data-language-source></select>
             </label>
-            <span class="language-arrow">→</span>
+            <span class="language-arrow" aria-hidden="true">→</span>
             <label>Перевод
               <select data-control="target-language" data-language-target></select>
             </label>
@@ -154,8 +154,8 @@ export function mountPopupShell(root: HTMLElement): void {
             <label class="setting-row setting-row--stack"><span><strong>Язык OCR</strong><small>Для текста на изображениях; авто загружает только EN + RU</small></span>
               <select data-control="settings-ocr-mode" data-language-ocr></select>
             </label>
-            <label class="setting-row"><span><strong>Сохранять историю</strong><small>Ручные, выделенные и OCR-переводы</small></span><input class="switch" type="checkbox" aria-label="Сохранять историю" data-control="save-history"></label>
-            <label class="setting-row"><span><strong>Кнопка у выделения</strong><small>Показывать маленького помощника на страницах</small></span><input class="switch" type="checkbox" aria-label="Показывать кнопку возле выделения" data-control="selection-button"></label>
+            <label class="setting-row"><span><strong>Сохранять историю</strong><small>Ручные, выделенные и OCR-переводы</small></span><input class="switch" type="checkbox" data-control="save-history"></label>
+            <label class="setting-row"><span><strong>Кнопка у выделения</strong><small>Показывать маленького помощника на страницах</small></span><input class="switch" type="checkbox" data-control="selection-button"></label>
             <label class="setting-row setting-row--stack"><span><strong>Размер текста</strong><small>Меняет popup и подсказки на страницах</small></span>
               <select data-control="text-scale"><option value="100">Обычный</option><option value="115">Крупный</option><option value="130">Очень крупный</option></select>
             </label>
@@ -169,12 +169,12 @@ export function mountPopupShell(root: HTMLElement): void {
 
           <div class="danger-zone">
             <span class="section-kicker">Данные на устройстве</span>
-            <button type="button" data-action="export-data"><span><strong>Экспорт данных</strong><small>Сохранить JSON с историей, словарём и карточками</small></span><span>↓</span></button>
-            <button type="button" data-action="import-data"><span><strong>Импорт данных</strong><small>Объединить с данными на устройстве</small></span><span>↑</span></button>
+            <button type="button" data-action="export-data"><span><strong>Экспорт данных</strong><small>Сохранить JSON с историей, словарём и карточками</small></span><span aria-hidden="true">↓</span></button>
+            <button type="button" data-action="import-data"><span><strong>Импорт данных</strong><small>Объединить с данными на устройстве</small></span><span aria-hidden="true">↑</span></button>
             <input type="file" accept="application/json,.json" data-import-file hidden>
-            <button type="button" data-action="clear-history-settings"><span><strong>Очистить историю</strong><small>Словарь останется</small></span><span>›</span></button>
-            <button type="button" data-action="clear-dictionary"><span><strong>Очистить словарь</strong><small>История останется</small></span><span>›</span></button>
-            <button class="danger" type="button" data-action="clear-all"><span><strong>Сбросить все данные</strong><small>Вернуть начальные настройки</small></span><span>›</span></button>
+            <button type="button" data-action="clear-history-settings"><span><strong>Очистить историю</strong><small>Словарь останется</small></span><span aria-hidden="true">›</span></button>
+            <button type="button" data-action="clear-dictionary"><span><strong>Очистить словарь</strong><small>История останется</small></span><span aria-hidden="true">›</span></button>
+            <button class="danger" type="button" data-action="clear-all"><span><strong>Сбросить все данные</strong><small>Вернуть начальные настройки</small></span><span aria-hidden="true">›</span></button>
           </div>
         </section>
       </div>
@@ -193,7 +193,7 @@ export function mountPopupShell(root: HTMLElement): void {
 
     <dialog class="modal modal--confirm" data-confirm-modal>
       <form method="dialog">
-        <div class="confirm-icon">!</div><h2 data-confirm-title>Очистить данные?</h2><p data-confirm-text></p>
+        <div class="confirm-icon" aria-hidden="true">!</div><h2 data-confirm-title>Очистить данные?</h2><p data-confirm-text></p>
         <div class="modal-actions"><button class="button button--soft" value="cancel">Отмена</button><button class="button button--danger" value="confirm" data-confirm-button>Очистить</button></div>
       </form>
     </dialog>

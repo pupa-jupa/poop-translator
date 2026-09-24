@@ -1,0 +1,3 @@
+## 2024-05-18 - Redundant aria-labels on inputs inside labels
+**Learning:** Adding an `aria-label` to an `<input>` element that is already deeply nested inside a comprehensive `<label>` structure completely overrides the visible text context. For instance, in `setting-row`, when `aria-label="Сохранять историю"` was added to the checkbox, screen readers ignored the helpful `<small>` description because the aria-label took full precedence.
+**Action:** Always let `<label>` wrap structure do the heavy lifting for form controls when the label contains all the context (including headings and helper descriptions). Avoid adding redundant `aria-label`s on form elements that are already fully described by their parent label.

@@ -49,7 +49,7 @@ describe('popup shell', () => {
     mountPopupShell(root);
 
     expect(root.querySelector('[aria-label="Текст для перевода"]')).not.toBeNull();
-    expect(root.querySelector('[aria-label="Сохранять историю"]')).not.toBeNull();
+    expect(root.querySelector('[data-control="save-history"]')).not.toBeNull();
     expect(root.querySelector('[data-action="clear-all"]')?.textContent).toContain('Сбросить все данные');
     expect(root.querySelector('[data-action="translate-region"]')?.textContent).toContain('Выбрать область');
     const translatePanel = root.querySelector('[data-view="translate"]');
