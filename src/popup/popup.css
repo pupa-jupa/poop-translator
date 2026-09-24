@@ -242,3 +242,19 @@ h2 { font-size: calc(22px * var(--text-scale)); }
 textarea::placeholder, input::placeholder { color: #d7a6be; }
 * { scrollbar-color: #e77cac #401329; scrollbar-width: thin; }
 ::selection { color: #301020; background: #ffabd1; }
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

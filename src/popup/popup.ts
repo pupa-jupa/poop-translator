@@ -88,7 +88,10 @@ function showToast(message: string): void {
 
 function setBusy(busy: boolean, label = 'Перевести'): void {
   translateButton.disabled = busy;
-  translateButton.querySelector('span')!.textContent = busy ? 'Перевожу…' : label;
+  const textSpan = translateButton.querySelector('[data-button-text]');
+  if (textSpan) textSpan.textContent = busy ? 'Перевожу…' : label;
+  const spinner = translateButton.querySelector('.spinner') as HTMLElement;
+  if (spinner) spinner.hidden = !busy;
 }
 
 function invalidateManualTranslation(): void {

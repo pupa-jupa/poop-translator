@@ -93,7 +93,13 @@ export function mountPopupShell(root: HTMLElement): void {
               <span data-char-count>0 / 10 000</span>
               <span class="enter-hint">Ctrl + Enter</span>
             </div>
-            <button class="button button--hero" type="submit"><span>Перевести</span><span aria-hidden="true">↗</span></button>
+            <button class="button button--hero" type="submit">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="spinner" aria-hidden="true" hidden></span>
+                <span data-button-text>Перевести</span>
+              </div>
+              <span aria-hidden="true">↗</span>
+            </button>
           </form>
 
           <article class="result-card" data-result hidden>
