@@ -4,17 +4,29 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
-    const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
-    const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
+function isSkippedElement(element: Element | null, cache?: Map<Element, boolean>): boolean {
+  if (!element) return false;
+  if (cache?.has(element)) return cache.get(element)!;
+
+  let skip = false;
+  if (SKIPPED_TAGS.has(element.tagName)) skip = true;
+  else if (element.hasAttribute('hidden') || element.getAttribute('aria-hidden') === 'true') skip = true;
+  else if (element.hasAttribute('data-poop-translator-root')) skip = true;
+  else {
+    const editable = element.getAttribute('contenteditable');
+    if ((element instanceof HTMLElement && element.isContentEditable) || (editable !== null && editable !== 'false')) skip = true;
+    else {
+      const style = element instanceof HTMLElement ? getComputedStyle(element) : undefined;
+      if (style?.display === 'none' || style?.visibility === 'hidden') skip = true;
+    }
   }
-  return false;
+
+  if (!skip && element.parentElement) {
+    skip = isSkippedElement(element.parentElement, cache);
+  }
+
+  cache?.set(element, skip);
+  return skip;
 }
 
 export function findMainContent(documentRoot: Document = document): HTMLElement {
@@ -23,10 +35,11 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+  const skipCache = new Map<Element, boolean>();
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
+      if (!text.data.trim() || isSkippedElement(text.parentElement, skipCache)) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
