@@ -1,0 +1,3 @@
+## 2024-09-26 - Layout Thrashing in Drag Handler
+**Learning:** Calling `element.getBoundingClientRect()` inside a high-frequency event listener like `pointermove` forces the browser to synchronously recalculate the layout (layout thrashing). The original code in `src/content.ts` did this to clamp the dragged card's position to the window bounds.
+**Action:** Avoid querying DOM dimensions inside rapid event handlers. Instead, pass the raw pointer coordinates to a state object, and use `requestAnimationFrame` to decouple the DOM writes (`positionCardElement`, which does the actual layout reading and CSS writing).

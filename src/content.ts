@@ -234,6 +234,8 @@ function cardShell(original: string, rect?: DOMRect): {
   const positionState: CardPositionState = { point: { x: 12, y: 12 }, userPositioned: false, handle: drag };
   cardPositions.set(element, positionState);
   let pointerOffset = { x: 0, y: 0 };
+  let animationFrameId: number | undefined;
+
   drag.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     const bounds = element.getBoundingClientRect();
@@ -245,18 +247,46 @@ function cardShell(original: string, rect?: DOMRect): {
     drag.dataset.dragging = 'true';
     event.preventDefault();
   });
+
   drag.addEventListener('pointermove', (event) => {
     if (positionState.pointerId !== event.pointerId) return;
+    // Update target point without reading DOM synchronously here
+    positionState.point = {
+      x: event.clientX - pointerOffset.x,
+      y: event.clientY - pointerOffset.y
+    };
+
+    // Batch the DOM read/write into the next frame
+    if (animationFrameId === undefined) {
+      animationFrameId = requestAnimationFrame(() => {
+        // Read bounds in the animation frame to avoid thrashing during event processing
+        const bounds = element.getBoundingClientRect();
+        positionState.point = clampFloatingCardPosition(
+          positionState.point,
+          { width: bounds.width, height: bounds.height },
+          { width: window.innerWidth, height: window.innerHeight },
+        );
+        positionCardElement(element);
+        animationFrameId = undefined;
+      });
+    }
+  });
+
+  const finishDrag = (event: PointerEvent) => {
+    if (positionState.pointerId !== event.pointerId) return;
+    if (animationFrameId !== undefined) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = undefined;
+    }
+    // Ensure the final position is clamped and applied before ending drag
     const bounds = element.getBoundingClientRect();
     positionState.point = clampFloatingCardPosition(
-      { x: event.clientX - pointerOffset.x, y: event.clientY - pointerOffset.y },
+      positionState.point,
       { width: bounds.width, height: bounds.height },
       { width: window.innerWidth, height: window.innerHeight },
     );
     positionCardElement(element);
-  });
-  const finishDrag = (event: PointerEvent) => {
-    if (positionState.pointerId !== event.pointerId) return;
+
     if (drag.hasPointerCapture(event.pointerId)) drag.releasePointerCapture(event.pointerId);
     positionState.pointerId = undefined;
     delete drag.dataset.dragging;
