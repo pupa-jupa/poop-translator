@@ -14,6 +14,11 @@ import { activateTab, mountPopupShell, type PopupTab } from './ui';
 const root = document.querySelector<HTMLDivElement>('#app')!;
 mountPopupShell(root);
 
+if (navigator.userAgent.includes('Mac')) {
+  const enterHint = root.querySelector<HTMLElement>('.enter-hint');
+  if (enterHint) enterHint.textContent = '⌘ + Enter';
+}
+
 function required<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
   if (!element) throw new Error(`Missing UI element: ${selector}`);
@@ -164,7 +169,7 @@ function renderHistory(): void {
     const card = document.createElement('article');
     card.className = 'item-card';
     card.innerHTML = `
-      <div class="item-main"><p></p><span class="item-arrow">→</span><p></p></div>
+      <div class="item-main"><p></p><span class="item-arrow" aria-hidden="true">→</span><p></p></div>
       <div class="item-meta"><span></span><div class="item-buttons"></div></div>`;
     const paragraphs = card.querySelectorAll('p');
     paragraphs[0]!.textContent = entry.original;
@@ -215,7 +220,7 @@ function renderDictionary(): void {
     const card = document.createElement('article');
     card.className = 'item-card';
     card.innerHTML = `
-      <div class="item-main"><p></p><span class="item-arrow">→</span><p></p></div>
+      <div class="item-main"><p></p><span class="item-arrow" aria-hidden="true">→</span><p></p></div>
       <div class="item-meta"><span></span><div class="item-buttons"></div></div>`;
     const paragraphs = card.querySelectorAll('p');
     paragraphs[0]!.textContent = entry.original;
