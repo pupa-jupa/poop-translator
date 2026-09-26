@@ -1,0 +1,3 @@
+## 2024-05-22 - Optimizing DOM Traversal in Page Translation
+**Learning:** Traversing every text node with `NodeFilter.SHOW_TEXT` and then checking parent visibility via `getComputedStyle` causes severe layout thrashing and visits every text node, even in hidden subtrees. Using `NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT` and returning `NodeFilter.FILTER_REJECT` for elements that should be skipped allows the `TreeWalker` to efficiently prune entire subtrees, dramatically improving traversal performance.
+**Action:** When filtering text nodes based on parent container properties (like visibility, tags, or attributes), always include `NodeFilter.SHOW_ELEMENT` to reject entire subtrees rather than filtering individual text nodes after the fact.

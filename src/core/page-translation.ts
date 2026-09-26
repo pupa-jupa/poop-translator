@@ -23,14 +23,35 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  const result: Text[] = [];
+
+  if (root.nodeType === 3) {
+    if ((root as Text).data.trim() && !isSkippedElement(root.parentElement)) result.push(root as Text);
+    return result;
+  }
+
+  // Use SHOW_ELEMENT | SHOW_TEXT to prune entire subtrees of skipped elements efficiently.
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
+      if (node.nodeType === 1) { // Node.ELEMENT_NODE
+        const element = node as Element;
+        if (SKIPPED_TAGS.has(element.tagName)) return NodeFilter.FILTER_REJECT;
+        if (element.hasAttribute('hidden') || element.getAttribute('aria-hidden') === 'true') return NodeFilter.FILTER_REJECT;
+        if (element.hasAttribute('data-poop-translator-root')) return NodeFilter.FILTER_REJECT;
+        const editable = element.getAttribute('contenteditable');
+        if ((element instanceof HTMLElement && element.isContentEditable) || (editable !== null && editable !== 'false')) return NodeFilter.FILTER_REJECT;
+        const style = element instanceof HTMLElement ? getComputedStyle(element) : undefined;
+        if (style?.display === 'none' || style?.visibility === 'hidden') return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_SKIP;
+      }
+      if (node.nodeType === 3) { // Node.TEXT_NODE
+        if (!(node as Text).data.trim()) return NodeFilter.FILTER_SKIP;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+      return NodeFilter.FILTER_SKIP;
     },
   });
-  const result: Text[] = [];
+
   let node: Node | null;
   while ((node = walker.nextNode())) result.push(node as Text);
   return result;
