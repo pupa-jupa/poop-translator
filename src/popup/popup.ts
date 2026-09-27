@@ -132,7 +132,7 @@ function formattedDate(timestamp: number): string {
 function emptyState(icon: string, title: string, description: string): HTMLElement {
   const element = document.createElement('div');
   element.className = 'empty-state';
-  element.innerHTML = `<div class="empty-state__face"></div><strong></strong><p></p>`;
+  element.innerHTML = `<div class="empty-state__face" aria-hidden="true"></div><strong></strong><p></p>`;
   element.querySelector('.empty-state__face')!.textContent = icon;
   element.querySelector('strong')!.textContent = title;
   element.querySelector('p')!.textContent = description;
