@@ -1,0 +1,4 @@
+## Initializing Bolt's journal
+## 2024-05-18 - Optimize TreeWalker text collection
+**Learning:** `TreeWalker` iterating over only `NodeFilter.SHOW_TEXT` forces `acceptNode` to process every single text node in the subtree, requiring expensive `getComputedStyle` and DOM-walking checks.
+**Action:** Use `NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT` for `TreeWalker` and check `isSkippedElement` on elements. Returning `NodeFilter.FILTER_REJECT` on elements prunes the subtree, skipping text nodes within hidden/skipped elements entirely. Also avoids walking up parent elements repeatedly for checking if an element is skipped since parents will already be skipped.
