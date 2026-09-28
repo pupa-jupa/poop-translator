@@ -1,0 +1,3 @@
+## 2024-10-27 - Fast DOM Traversal with TreeWalker
+**Learning:** `TreeWalker` evaluation for elements can be optimized heavily by checking styles and skip-criteria at the element level instead of at the leaf (text node) level. In `collectTextNodes`, when configuring the `NodeFilter` to `SHOW_ELEMENT | SHOW_TEXT` and returning `NodeFilter.FILTER_REJECT` for elements, we prune the entire subtree (e.g. elements with `display: none`, script tags). This transforms the check complexity from O(depth * nodes) to O(nodes), as we no longer recalculate `getComputedStyle` repeatedly for every nested text node.
+**Action:** When filtering DOM trees, process and prune elements using `NodeFilter.FILTER_REJECT` rather than evaluating conditions up the tree on each text node separately.
