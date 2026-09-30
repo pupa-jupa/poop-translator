@@ -1,0 +1,3 @@
+## 2025-05-18 - TreeWalker Subtree Rejection
+**Learning:** When using `TreeWalker` to extract text nodes, checking `isSkippedElement` (which walks up the DOM tree and potentially invokes synchronous layout via `getComputedStyle`) on every single `Text` node is extremely slow: O(n * d).
+**Action:** Always filter skipped elements at the element level using `NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT` and returning `NodeFilter.FILTER_REJECT` for hidden/skipped elements. This prevents the `TreeWalker` from entering skipped subtrees entirely, reducing traversal from O(n * d) to O(n) and saving layout thrashing.
