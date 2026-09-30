@@ -4,16 +4,14 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
-    const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
-    const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
-  }
+function isSkippedNode(current: Element): boolean {
+  if (SKIPPED_TAGS.has(current.tagName)) return true;
+  if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
+  if (current.hasAttribute('data-poop-translator-root')) return true;
+  const editable = current.getAttribute('contenteditable');
+  if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
+  const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
+  if (style?.display === 'none' || style?.visibility === 'hidden') return true;
   return false;
 }
 
@@ -22,17 +20,22 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 }
 
 export function collectTextNodes(root: Node): Text[] {
+  // Optimization: Use SHOW_ELEMENT | SHOW_TEXT to prune entire subtrees of skipped elements
+  // instead of redundantly checking ancestors for every individual text node.
   const doc = root.ownerDocument ?? document;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
+      if (node.nodeType === Node.TEXT_NODE) {
+        return (node as Text).data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+      return isSkippedNode(node as Element) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP;
     },
   });
   const result: Text[] = [];
   let node: Node | null;
-  while ((node = walker.nextNode())) result.push(node as Text);
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === Node.TEXT_NODE) result.push(node as Text);
+  }
   return result;
 }
 
