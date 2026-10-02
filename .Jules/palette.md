@@ -1,0 +1,3 @@
+## 2026-10-02 - Icon-Only Tooltips and Dynamic A11y Announcements
+**Learning:** Found a specific pattern in this extension's UI components where icon-only buttons (like `pt-icon-button` and `icon-button`) had `aria-label` but lacked `title`, which meant sighted users using mouse navigation missed the hover tooltips. Also, dynamic text nodes (e.g. `pt-translation` container) did not announce naturally to screen readers when populated.
+**Action:** When working on this UI, ensure any icon-only button elements have a `title` matching their `aria-label`, and use `aria-live="polite"` on output text blocks that are updated post-interaction.
