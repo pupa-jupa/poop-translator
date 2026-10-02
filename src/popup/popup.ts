@@ -79,6 +79,14 @@ const confirmTitle = required<HTMLElement>('[data-confirm-title]');
 const confirmText = required<HTMLElement>('[data-confirm-text]');
 const toast = required<HTMLElement>('[data-toast]');
 
+function debounce<T extends (...args: any[]) => void>(func: T, wait: number): T {
+  let timeout: number | undefined;
+  return function (this: any, ...args: Parameters<T>) {
+    window.clearTimeout(timeout);
+    timeout = window.setTimeout(() => func.apply(this, args), wait);
+  } as T;
+}
+
 function showToast(message: string): void {
   window.clearTimeout(toastTimer);
   toast.textContent = message;
@@ -676,8 +684,11 @@ textScale.addEventListener('change', () => {
     .then(refreshState)
     .catch(() => showToast('Не удалось сохранить размер текста'));
 });
-historySearch.addEventListener('input', renderHistory);
-dictionarySearch.addEventListener('input', renderDictionary);
+// ⚡ Bolt: Debounce search inputs to prevent rendering the entire list on every single keystroke.
+// This reduces the number of UI re-renders and DOM operations by grouping rapid keystrokes,
+// leading to a smoother typing experience, especially with a large dictionary or history.
+historySearch.addEventListener('input', debounce(renderHistory, 300));
+dictionarySearch.addEventListener('input', debounce(renderDictionary, 300));
 
 required<HTMLButtonElement>('[data-action="copy-result"]').addEventListener('click', () => {
   if (!latestResult) return;
