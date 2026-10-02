@@ -215,14 +215,14 @@ function cardShell(original: string, rect?: DOMRect): {
       <span class="pt-card-mark">${poopSvg}</span>
       <span class="pt-card-title">poop translator</span>
       <button class="pt-card-drag" type="button" aria-label="Переместить окно перевода" title="Переместить окно">⠿</button>
-      <button class="pt-icon-button" type="button" aria-label="Закрыть">✕</button>
+      <button class="pt-icon-button" type="button" aria-label="Закрыть" title="Закрыть">✕</button>
     </div>
     <p class="pt-label">Оригинал</p>
     <p class="pt-copy pt-original"></p>
     <div class="pt-divider"></div>
     <p class="pt-label">Перевод</p>
     <div class="pt-status" role="status" aria-live="polite"><span class="pt-spinner"></span><span>Запускаю локальный перевод…</span></div>
-    <p class="pt-copy pt-translation" hidden></p>
+    <p class="pt-copy pt-translation" aria-live="polite" hidden></p>
     <section class="pt-variants" aria-label="Варианты перевода" hidden>
       <div class="pt-variants__head"><span>Другие значения</span><small>Локальный словарь · без ранжирования по контексту</small></div>
       <div class="pt-variants__list"></div>
