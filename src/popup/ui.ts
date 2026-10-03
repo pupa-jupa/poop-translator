@@ -96,7 +96,7 @@ export function mountPopupShell(root: HTMLElement): void {
             <button class="button button--hero" type="submit"><span>Перевести</span><span aria-hidden="true">↗</span></button>
           </form>
 
-          <article class="result-card" data-result hidden>
+          <article class="result-card" data-result aria-live="polite" hidden>
             <div class="result-head"><span>Результат</span><span data-result-language></span></div>
             <p class="result-original" data-result-original></p>
             <div class="result-divider"></div>
@@ -163,7 +163,7 @@ export function mountPopupShell(root: HTMLElement): void {
 
           <div class="engine-card">
             <div class="engine-card__icon">${brandIcon}</div>
-            <div><strong>Локальный движок Chrome</strong><p data-engine-detail>Проверяю доступность…</p></div>
+            <div><strong>Локальный движок Chrome</strong><p data-engine-detail aria-live="polite">Проверяю доступность…</p></div>
             <button class="button button--soft button--small" type="button" data-action="prepare-engine">Подготовить</button>
           </div>
 
@@ -182,7 +182,7 @@ export function mountPopupShell(root: HTMLElement): void {
 
     <dialog class="modal" data-word-modal>
       <form method="dialog" data-form="word">
-        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" type="submit">✕</button></div>
+        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" title="Закрыть" type="submit">✕</button></div>
         <input type="hidden" data-word-id>
         <label>Слово или фраза<input required maxlength="500" data-word-original></label>
         <label>Перевод<input required maxlength="500" data-word-translation></label>

@@ -172,6 +172,7 @@ function showSelectionButton(rect: DOMRect): void {
   button.type = 'button';
   button.className = 'pt-selection-button';
   button.setAttribute('aria-label', 'Перевести выделенный текст');
+  button.setAttribute('title', 'Перевести выделенный текст');
   button.innerHTML = poopSvg;
   const left = clamp(rect.right + 7, 8, window.innerWidth - 44);
   const top = clamp(rect.bottom + 5, 8, window.innerHeight - 44);
@@ -215,7 +216,7 @@ function cardShell(original: string, rect?: DOMRect): {
       <span class="pt-card-mark">${poopSvg}</span>
       <span class="pt-card-title">poop translator</span>
       <button class="pt-card-drag" type="button" aria-label="Переместить окно перевода" title="Переместить окно">⠿</button>
-      <button class="pt-icon-button" type="button" aria-label="Закрыть">✕</button>
+      <button class="pt-icon-button" type="button" aria-label="Закрыть" title="Закрыть">✕</button>
     </div>
     <p class="pt-label">Оригинал</p>
     <p class="pt-copy pt-original"></p>
@@ -314,6 +315,7 @@ function createVariantButton(result: TranslationResult, variant: DictionaryVaria
   button.className = 'pt-variant';
   button.type = 'button';
   button.setAttribute('aria-label', `Добавить «${variant.translation}» в словарь`);
+  button.setAttribute('title', `Добавить «${variant.translation}» в словарь`);
   const meaning = document.createElement('span');
   meaning.textContent = variant.translation;
   const meta = document.createElement('small');
@@ -738,7 +740,7 @@ function startRegionSelection(): void {
   overlay.setAttribute('aria-label', 'Выбор области для распознавания текста');
   overlay.setAttribute('aria-describedby', 'pt-region-instructions');
   overlay.innerHTML = `
-    <div class="pt-region-help" id="pt-region-instructions"><div><strong>Выделите текст или картинку</strong><span>Проведите мышью по нужной области · Esc — отмена</span></div><button type="button" class="pt-region-cancel">Отмена</button></div>
+    <div class="pt-region-help" id="pt-region-instructions" aria-live="polite"><div><strong>Выделите текст или картинку</strong><span>Проведите мышью по нужной области · Esc — отмена</span></div><button type="button" class="pt-region-cancel">Отмена</button></div>
     <div class="pt-region-box" hidden><span aria-hidden="true"></span></div>`;
   const box = overlay.querySelector<HTMLDivElement>('.pt-region-box')!;
   const sizeLabel = box.querySelector<HTMLSpanElement>('span')!;
