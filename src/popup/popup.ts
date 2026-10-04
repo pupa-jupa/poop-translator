@@ -20,6 +20,15 @@ function required<T extends Element>(selector: string): T {
   return element;
 }
 
+// ⚡ Bolt: Debounce utility to prevent main thread blocking on rapid sequential updates
+function debounce<T extends (...args: any[]) => void>(func: T, delay: number): (...args: Parameters<T>) => void {
+  let timeoutId: number | undefined;
+  return function (...args: Parameters<T>) {
+    window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => func(...args), delay);
+  };
+}
+
 const repository = getStorageClient();
 const engine = new ChromeTranslator();
 let state: ExtensionState = structuredClone(DEFAULT_STATE);
@@ -676,8 +685,8 @@ textScale.addEventListener('change', () => {
     .then(refreshState)
     .catch(() => showToast('Не удалось сохранить размер текста'));
 });
-historySearch.addEventListener('input', renderHistory);
-dictionarySearch.addEventListener('input', renderDictionary);
+historySearch.addEventListener('input', debounce(renderHistory, 150));
+dictionarySearch.addEventListener('input', debounce(renderDictionary, 150));
 
 required<HTMLButtonElement>('[data-action="copy-result"]').addEventListener('click', () => {
   if (!latestResult) return;
