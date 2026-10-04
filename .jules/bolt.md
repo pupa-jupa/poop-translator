@@ -1,0 +1,1 @@
+## 2024-10-04 - Initialized Bolt Journal\n**Learning:** This journal tracks critical codebase-specific performance learnings.\n**Action:** Update when discovering unique bottlenecks or rejected optimizations.
