@@ -1,0 +1,3 @@
+## 2026-10-04 - Dynamic Content and Icon Tooltips Accessibility
+**Learning:** Dynamically updated text in the DOM, such as translation results and downloading progress percentages, needs `aria-live="polite"` so that screen readers announce these changes to the user without interrupting their flow. Additionally, while `aria-label` helps screen readers, it does not provide a visual tooltip for sighted users on icon-only buttons, which should also have a `title` attribute.
+**Action:** Always verify that dynamically injected content (results, status text) has an `aria-live` attribute to ensure screen reader users receive updates, and use `title` alongside `aria-label` for icon-only buttons.
