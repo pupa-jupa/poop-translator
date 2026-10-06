@@ -1,0 +1,3 @@
+## 2024-05-24 - Optimizing deeply nested DOM traversal
+**Learning:** `TreeWalker` node filters that repetitively walk up the DOM (like `isSkippedElement`) cause an O(depth) penalty for every leaf text node. For a deep tree, this effectively repeats the same computations for common ancestor nodes over and over.
+**Action:** Always consider memoizing DOM traversal checks with a `WeakMap` across the lifetime of the traversal. A well-placed `WeakMap<Element, boolean>` can turn repetitive O(depth) upwards tree-walking for leaf nodes into roughly O(1) amortized checks, significantly improving performance when translating complex HTML pages.
