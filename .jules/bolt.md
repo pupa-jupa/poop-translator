@@ -1,0 +1,3 @@
+## 2024-05-19 - TreeWalker Ancestor Traversal Optimization
+**Learning:** During page translation, using `TreeWalker` to iterate over text nodes and repeatedly checking `isSkippedElement` by traversing up the ancestor chain `O(depth)` causes significant performance overhead in deeply nested DOMs because every text node repeats the same ancestor checks.
+**Action:** Use a `WeakMap<Element, boolean>` to memoize the result of `isSkippedElement` for intermediate elements in the ancestor chain. This amortizes the O(depth) check to roughly O(1) per text node since common ancestors' results are cached.
