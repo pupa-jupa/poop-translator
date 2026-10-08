@@ -62,7 +62,7 @@ import"./modulepreload-polyfill-B5Qt9EMX.js";import{s as jt,D as Vt,c as Jt,S as
             <div class="result-head"><span>Результат</span><span data-result-language></span></div>
             <p class="result-original" data-result-original></p>
             <div class="result-divider"></div>
-            <p class="result-translation" data-result-translation></p>
+            <p class="result-translation" data-result-translation aria-live="polite"></p>
             <section class="result-variants" data-result-variants aria-label="Варианты перевода" hidden>
               <div class="result-variants__head"><span>Другие значения</span><small>Локальный словарь · без ранжирования по контексту</small></div>
               <div class="result-variants__list" data-result-variants-list></div>
@@ -125,7 +125,7 @@ import"./modulepreload-polyfill-B5Qt9EMX.js";import{s as jt,D as Vt,c as Jt,S as
 
           <div class="engine-card">
             <div class="engine-card__icon">${wt}</div>
-            <div><strong>Локальный движок Chrome</strong><p data-engine-detail>Проверяю доступность…</p></div>
+            <div><strong>Локальный движок Chrome</strong><p data-engine-detail aria-live="polite">Проверяю доступность…</p></div>
             <button class="button button--soft button--small" type="button" data-action="prepare-engine">Подготовить</button>
           </div>
 
@@ -144,7 +144,7 @@ import"./modulepreload-polyfill-B5Qt9EMX.js";import{s as jt,D as Vt,c as Jt,S as
 
     <dialog class="modal" data-word-modal>
       <form method="dialog" data-form="word">
-        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" type="submit">✕</button></div>
+        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" title="Закрыть" type="submit">✕</button></div>
         <input type="hidden" data-word-id>
         <label>Слово или фраза<input required maxlength="500" data-word-original></label>
         <label>Перевод<input required maxlength="500" data-word-translation></label>
