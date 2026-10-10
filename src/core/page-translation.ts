@@ -4,17 +4,38 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
-    const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
-    const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
-  }
-  return false;
+// ⚡ Bolt: Memoize skipped element checks during TreeWalker traversal
+// 💡 What: Use WeakMap to cache isSkippedElement results per element
+// 🎯 Why: Prevents redundant getComputedStyle calls on ancestors, reducing O(depth) to amortized O(1)
+// 📊 Impact: Significantly speeds up page translation on large DOMs
+function createSkippedElementChecker(): (element: Element | null) => boolean {
+  const cache = new WeakMap<Element, boolean>();
+  return function isSkippedElement(element: Element | null): boolean {
+    if (!element) return false;
+    const cached = cache.get(element);
+    if (cached !== undefined) return cached;
+
+    let skipped = false;
+    if (SKIPPED_TAGS.has(element.tagName) ||
+        element.hasAttribute('hidden') || element.getAttribute('aria-hidden') === 'true' ||
+        element.hasAttribute('data-poop-translator-root')) {
+      skipped = true;
+    } else {
+      const editable = element.getAttribute('contenteditable');
+      if ((element instanceof HTMLElement && element.isContentEditable) || (editable !== null && editable !== 'false')) {
+        skipped = true;
+      } else {
+        const style = element instanceof HTMLElement ? getComputedStyle(element) : undefined;
+        if (style?.display === 'none' || style?.visibility === 'hidden') {
+          skipped = true;
+        } else {
+          skipped = isSkippedElement(element.parentElement);
+        }
+      }
+    }
+    cache.set(element, skipped);
+    return skipped;
+  };
 }
 
 export function findMainContent(documentRoot: Document = document): HTMLElement {
@@ -23,6 +44,7 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+  const isSkippedElement = createSkippedElementChecker();
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
