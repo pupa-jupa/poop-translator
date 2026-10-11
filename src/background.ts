@@ -118,6 +118,9 @@ chrome.commands.onCommand.addListener((command, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  // Security enhancement: Ensure messages only come from our own extension context.
+  if (sender.id !== chrome.runtime.id) return false;
+
   if (isRegionCaptureRequest(message)) {
     void captureAndRecognizeRegion(message, sender)
       .then((data) => sendResponse({ ok: true, data }))
