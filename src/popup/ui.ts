@@ -103,7 +103,7 @@ export function mountPopupShell(root: HTMLElement): void {
             <p class="result-translation" data-result-translation></p>
             <section class="result-variants" data-result-variants aria-label="Варианты перевода" hidden>
               <div class="result-variants__head"><span>Другие значения</span><small>Локальный словарь · без ранжирования по контексту</small></div>
-              <div class="result-variants__list" data-result-variants-list></div>
+              <div class="result-variants__list" data-result-variants-list aria-live="polite"></div>
             </section>
             <div class="result-actions">
               <button class="button button--soft" type="button" data-action="copy-result">Копировать</button>
@@ -127,19 +127,19 @@ export function mountPopupShell(root: HTMLElement): void {
         <section id="panel-history" class="view" data-view="history" role="tabpanel" aria-labelledby="tab-history" hidden>
           <div class="section-head"><div><span class="section-kicker">Недавнее</span><h2>История</h2></div><button class="text-button" type="button" data-action="clear-history">Очистить</button></div>
           <label class="search-box"><span aria-hidden="true">⌕</span><input type="search" data-search="history" placeholder="Найти перевод" aria-label="Поиск в истории"></label>
-          <div class="item-list" data-history-list></div>
+          <div class="item-list" data-history-list aria-live="polite"></div>
         </section>
 
         <section id="panel-dictionary" class="view" data-view="dictionary" role="tabpanel" aria-labelledby="tab-dictionary" hidden>
           <div class="section-head"><div><span class="section-kicker">Мои слова</span><h2>Словарь</h2></div><button class="button button--accent button--small" type="button" data-action="add-word">+ Добавить</button></div>
           <label class="search-box"><span aria-hidden="true">⌕</span><input type="search" data-search="dictionary" placeholder="Найти слово" aria-label="Поиск в словаре"></label>
-          <div class="item-list" data-dictionary-list></div>
+          <div class="item-list" data-dictionary-list aria-live="polite"></div>
         </section>
 
         <section id="panel-review" class="view" data-view="review" role="tabpanel" aria-labelledby="tab-review" hidden>
           <div class="section-head"><div><span class="section-kicker">Вспомнить с любовью</span><h2>Карточки</h2></div><span class="review-count" data-review-due aria-live="polite"></span></div>
           <p class="review-intro">Сначала вспомните перевод, затем откройте ответ и выберите, когда повторить слово.</p>
-          <div data-review-list></div>
+          <div data-review-list aria-live="polite"></div>
         </section>
 
         <section id="panel-settings" class="view" data-view="settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
@@ -182,7 +182,7 @@ export function mountPopupShell(root: HTMLElement): void {
 
     <dialog class="modal" data-word-modal>
       <form method="dialog" data-form="word">
-        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" type="submit">✕</button></div>
+        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" title="Закрыть" type="submit">✕</button></div>
         <input type="hidden" data-word-id>
         <label>Слово или фраза<input required maxlength="500" data-word-original></label>
         <label>Перевод<input required maxlength="500" data-word-translation></label>
