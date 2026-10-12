@@ -1,0 +1,3 @@
+## 2026-10-12 - Icon-only Buttons and Dynamic Container Announcements
+**Learning:** For screen readers, `aria-label` is sufficient for icon-only buttons, but sighted users need tooltips (like `title`) since they don't use screen readers and might not know what an abstract icon does. Also, dynamic updates in custom UI components (like search results in a tab panel) require explicit `aria-live` attributes because they don't inherently communicate updates to screen readers like native form elements might.
+**Action:** When adding `aria-label` to icon-only buttons (like 'X' for close), always pair it with a `title` attribute for tooltip support. Ensure any container whose children change based on user input (like a search list) includes `aria-live="polite"`.
