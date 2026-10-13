@@ -1,0 +1,3 @@
+## 2024-05-15 - TreeWalker Memoization
+**Learning:** Traversing the DOM with TreeWalker and filtering nodes dynamically per leaf (like calling \`isSkippedElement\` on every text node's parent) runs in O(depth) time for each leaf. When the check involves things like \`getComputedStyle\` or attribute checks upwards, it can be extremely expensive on large pages.
+**Action:** Use a \`WeakMap<Element, boolean>\` scoped to the tree traversal to memoize properties evaluated on ancestor paths. This brings the amortized cost per leaf down to nearly O(1), yielding measurable performance boosts during heavy DOM parses.
