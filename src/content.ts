@@ -77,6 +77,10 @@ const poopSvg = `
     <path d="M20 33c3 2 7 2 10 0" stroke="#201a28" stroke-width="2" stroke-linecap="round"/>
   </svg>`;
 
+function getPoopIcon(): Element {
+  return new DOMParser().parseFromString(poopSvg, 'image/svg+xml').documentElement;
+}
+
 function ensureLayer(): HTMLDivElement {
   if (layer) return layer;
   host = document.createElement('div');
@@ -165,6 +169,14 @@ function makeButton(label: string, className = 'pt-button'): HTMLButtonElement {
   return button;
 }
 
+function setSpinnerStatus(element: HTMLElement, text: string): void {
+  const spinner = document.createElement('span');
+  spinner.className = 'pt-spinner';
+  const label = document.createElement('span');
+  label.textContent = text;
+  element.replaceChildren(spinner, label);
+}
+
 function showSelectionButton(rect: DOMRect): void {
   removeSelectionButton();
   closeCard();
@@ -172,7 +184,7 @@ function showSelectionButton(rect: DOMRect): void {
   button.type = 'button';
   button.className = 'pt-selection-button';
   button.setAttribute('aria-label', 'Перевести выделенный текст');
-  button.innerHTML = poopSvg;
+  button.append(getPoopIcon());
   const left = clamp(rect.right + 7, 8, window.innerWidth - 44);
   const top = clamp(rect.bottom + 5, 8, window.innerHeight - 44);
   button.style.setProperty('--pt-left', `${left}px`);
@@ -210,27 +222,70 @@ function cardShell(original: string, rect?: DOMRect): {
   element.style.setProperty('--pt-left', '12px');
   element.style.setProperty('--pt-top', '12px');
   element.style.visibility = 'hidden';
-  element.innerHTML = `
-    <div class="pt-card-header">
-      <span class="pt-card-mark">${poopSvg}</span>
-      <span class="pt-card-title">poop translator</span>
-      <button class="pt-card-drag" type="button" aria-label="Переместить окно перевода" title="Переместить окно">⠿</button>
-      <button class="pt-icon-button" type="button" aria-label="Закрыть">✕</button>
-    </div>
-    <p class="pt-label">Оригинал</p>
-    <p class="pt-copy pt-original"></p>
-    <div class="pt-divider"></div>
-    <p class="pt-label">Перевод</p>
-    <div class="pt-status" role="status" aria-live="polite"><span class="pt-spinner"></span><span>Запускаю локальный перевод…</span></div>
-    <p class="pt-copy pt-translation" hidden></p>
-    <section class="pt-variants" aria-label="Варианты перевода" hidden>
-      <div class="pt-variants__head"><span>Другие значения</span><small>Локальный словарь · без ранжирования по контексту</small></div>
-      <div class="pt-variants__list"></div>
-    </section>
-    <div class="pt-actions"></div>`;
-  element.querySelector<HTMLParagraphElement>('.pt-original')!.textContent = original;
-  element.querySelector<HTMLButtonElement>('.pt-icon-button')!.addEventListener('click', closeCard);
-  const drag = element.querySelector<HTMLButtonElement>('.pt-card-drag')!;
+  const header = document.createElement('div');
+  header.className = 'pt-card-header';
+  const mark = document.createElement('span');
+  mark.className = 'pt-card-mark';
+  mark.append(getPoopIcon());
+  const title = document.createElement('span');
+  title.className = 'pt-card-title';
+  title.textContent = 'poop translator';
+  const drag = document.createElement('button');
+  drag.className = 'pt-card-drag';
+  drag.type = 'button';
+  drag.setAttribute('aria-label', 'Переместить окно перевода');
+  drag.title = 'Переместить окно';
+  drag.textContent = '⠿';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'pt-icon-button';
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Закрыть');
+  closeBtn.textContent = '✕';
+  header.append(mark, title, drag, closeBtn);
+
+  const labelOriginal = document.createElement('p');
+  labelOriginal.className = 'pt-label';
+  labelOriginal.textContent = 'Оригинал';
+  const originalEl = document.createElement('p');
+  originalEl.className = 'pt-copy pt-original';
+  const divider = document.createElement('div');
+  divider.className = 'pt-divider';
+
+  const labelTranslation = document.createElement('p');
+  labelTranslation.className = 'pt-label';
+  labelTranslation.textContent = 'Перевод';
+  const status = document.createElement('div');
+  status.className = 'pt-status';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  setSpinnerStatus(status, 'Запускаю локальный перевод…');
+
+  const translationEl = document.createElement('p');
+  translationEl.className = 'pt-copy pt-translation';
+  translationEl.hidden = true;
+
+  const variants = document.createElement('section');
+  variants.className = 'pt-variants';
+  variants.setAttribute('aria-label', 'Варианты перевода');
+  variants.hidden = true;
+  const variantsHead = document.createElement('div');
+  variantsHead.className = 'pt-variants__head';
+  const variantsTitle = document.createElement('span');
+  variantsTitle.textContent = 'Другие значения';
+  const variantsSubtitle = document.createElement('small');
+  variantsSubtitle.textContent = 'Локальный словарь · без ранжирования по контексту';
+  variantsHead.append(variantsTitle, variantsSubtitle);
+  const variantsList = document.createElement('div');
+  variantsList.className = 'pt-variants__list';
+  variants.append(variantsHead, variantsList);
+
+  const actions = document.createElement('div');
+  actions.className = 'pt-actions';
+
+  element.append(header, labelOriginal, originalEl, divider, labelTranslation, status, translationEl, variants, actions);
+
+  originalEl.textContent = original;
+  closeBtn.addEventListener('click', closeCard);
   const positionState: CardPositionState = { point: { x: 12, y: 12 }, userPositioned: false, handle: drag };
   cardPositions.set(element, positionState);
   let pointerOffset = { x: 0, y: 0 };
@@ -416,7 +471,7 @@ async function showTranslationCard(
   const run = async () => {
     view.status.hidden = false;
     view.status.dataset.kind = '';
-    view.status.innerHTML = '<span class="pt-spinner"></span><span>Запускаю локальный перевод…</span>';
+    setSpinnerStatus(view.status, 'Запускаю локальный перевод…');
     view.translation.hidden = true;
     view.actions.replaceChildren();
     const slowHint = window.setTimeout(() => {
@@ -441,7 +496,7 @@ async function showTranslationCard(
           const pending = attempt.activate({
             onProgress(percent) { view.status.textContent = `Загружаю языковой пакет: ${percent}%`; },
           });
-          view.status.innerHTML = '<span class="pt-spinner"></span><span>Подготавливаю языковой пакет…</span>';
+          setSpinnerStatus(view.status, 'Подготавливаю языковой пакет…');
           view.actions.replaceChildren();
           void pending.then(presentResult).catch(showFailure);
         });
@@ -486,7 +541,7 @@ function showRegionProgress(operation: RegionOperation): CardView | undefined {
   const view = cardShell('Выбранная область');
   view.element.setAttribute('aria-label', 'Распознавание текста в области');
   view.status.hidden = false;
-  view.status.innerHTML = '<span class="pt-spinner"></span><span>Распознаю текст на устройстве…</span>';
+  setSpinnerStatus(view.status, 'Распознаю текст на устройстве…');
   operation.view = view;
   return view;
 }
@@ -554,7 +609,7 @@ async function renderRecognizedTranslation(
   }
   view.status.hidden = false;
   view.status.dataset.kind = '';
-  view.status.innerHTML = '<span class="pt-spinner"></span><span>Перевожу распознанный текст…</span>';
+  setSpinnerStatus(view.status, 'Перевожу распознанный текст…');
   view.translation.hidden = true;
   view.variantGeneration += 1;
   view.variants.hidden = true;
@@ -737,13 +792,29 @@ function startRegionSelection(): void {
   overlay.setAttribute('aria-modal', 'true');
   overlay.setAttribute('aria-label', 'Выбор области для распознавания текста');
   overlay.setAttribute('aria-describedby', 'pt-region-instructions');
-  overlay.innerHTML = `
-    <div class="pt-region-help" id="pt-region-instructions"><div><strong>Выделите текст или картинку</strong><span>Проведите мышью по нужной области · Esc — отмена</span></div><button type="button" class="pt-region-cancel">Отмена</button></div>
-    <div class="pt-region-box" hidden><span aria-hidden="true"></span></div>`;
-  const box = overlay.querySelector<HTMLDivElement>('.pt-region-box')!;
-  const sizeLabel = box.querySelector<HTMLSpanElement>('span')!;
-  const hint = overlay.querySelector<HTMLSpanElement>('.pt-region-help span')!;
-  const cancel = overlay.querySelector<HTMLButtonElement>('.pt-region-cancel')!;
+  const help = document.createElement('div');
+  help.className = 'pt-region-help';
+  help.id = 'pt-region-instructions';
+  const helpContent = document.createElement('div');
+  const helpStrong = document.createElement('strong');
+  helpStrong.textContent = 'Выделите текст или картинку';
+  const hint = document.createElement('span');
+  hint.textContent = 'Проведите мышью по нужной области · Esc — отмена';
+  helpContent.append(helpStrong, hint);
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'pt-region-cancel';
+  cancel.textContent = 'Отмена';
+  help.append(helpContent, cancel);
+
+  const box = document.createElement('div');
+  box.className = 'pt-region-box';
+  box.hidden = true;
+  const sizeLabel = document.createElement('span');
+  sizeLabel.setAttribute('aria-hidden', 'true');
+  box.append(sizeLabel);
+
+  overlay.append(help, box);
   overlay.addEventListener('keydown', (event) => {
     if (event.key !== 'Tab') return;
     event.preventDefault();
@@ -824,11 +895,18 @@ function showPagePrompt(targetLanguage: PageTargetLanguage, sourceMode: SourceMo
   dismissPagePrompt();
   const prompt = document.createElement('div');
   prompt.className = 'pt-page-prompt';
-  prompt.innerHTML = `
-    <span class="pt-card-mark">${poopSvg}</span>
-    <div><strong>Перевести страницу на ${languageDefinition(targetLanguage).toName}?</strong><span>${sourceMode === 'auto' ? 'Язык страницы определится локально.' : `Исходный язык: ${languageDefinition(sourceMode).name}.`} Для новой пары может потребоваться ещё одно нажатие.</span></div>
-    <div class="pt-page-prompt__buttons"></div>`;
-  const buttons = prompt.querySelector<HTMLDivElement>('.pt-page-prompt__buttons')!;
+  const mark = document.createElement('span');
+  mark.className = 'pt-card-mark';
+  mark.append(getPoopIcon());
+  const content = document.createElement('div');
+  const strong = document.createElement('strong');
+  strong.textContent = `Перевести страницу на ${languageDefinition(targetLanguage).toName}?`;
+  const span = document.createElement('span');
+  span.textContent = `${sourceMode === 'auto' ? 'Язык страницы определится локально.' : `Исходный язык: ${languageDefinition(sourceMode).name}.`} Для новой пары может потребоваться ещё одно нажатие.`;
+  content.append(strong, span);
+  const buttons = document.createElement('div');
+  buttons.className = 'pt-page-prompt__buttons';
+  prompt.append(mark, content, buttons);
   const cancel = makeButton('Не сейчас');
   const start = makeButton('Начать', 'pt-button pt-button--primary');
   cancel.addEventListener('click', () => {
