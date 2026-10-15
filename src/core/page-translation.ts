@@ -4,17 +4,29 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
-    const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
-    const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
+function isSkippedElement(element: Element | null, memo: WeakMap<Element, boolean>): boolean {
+  if (!element) return false;
+  if (memo.has(element)) return memo.get(element)!;
+
+  let skipped = false;
+  if (SKIPPED_TAGS.has(element.tagName)) skipped = true;
+  else if (element.hasAttribute('hidden') || element.getAttribute('aria-hidden') === 'true') skipped = true;
+  else if (element.hasAttribute('data-poop-translator-root')) skipped = true;
+  else {
+    const editable = element.getAttribute('contenteditable');
+    if ((element instanceof HTMLElement && element.isContentEditable) || (editable !== null && editable !== 'false')) skipped = true;
+    else {
+      const style = element instanceof HTMLElement ? getComputedStyle(element) : undefined;
+      if (style?.display === 'none' || style?.visibility === 'hidden') skipped = true;
+    }
   }
-  return false;
+
+  if (!skipped && element.parentElement) {
+    skipped = isSkippedElement(element.parentElement, memo);
+  }
+
+  memo.set(element, skipped);
+  return skipped;
 }
 
 export function findMainContent(documentRoot: Document = document): HTMLElement {
@@ -23,10 +35,11 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+  const skipMemo = new WeakMap<Element, boolean>();
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
+      if (!text.data.trim() || isSkippedElement(text.parentElement, skipMemo)) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
