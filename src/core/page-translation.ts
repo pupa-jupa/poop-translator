@@ -4,17 +4,45 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
+// ⚡ Bolt: Recursively check if an element should be skipped.
+// Memoizes the result in the cache so that deeply nested siblings
+// don't repeat O(depth) ancestor traversal and getComputedStyle calls.
+function isSkippedElement(element: Element | null, cache: WeakMap<Element, boolean>): boolean {
+  const path: Element[] = [];
+  let isSkipped = false;
   for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
+    if (cache.has(current)) {
+      isSkipped = cache.get(current)!;
+      break;
+    }
+    path.push(current);
+    if (SKIPPED_TAGS.has(current.tagName)) {
+      isSkipped = true;
+      break;
+    }
+    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') {
+      isSkipped = true;
+      break;
+    }
+    if (current.hasAttribute('data-poop-translator-root')) {
+      isSkipped = true;
+      break;
+    }
     const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
+    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) {
+      isSkipped = true;
+      break;
+    }
     const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
+    if (style?.display === 'none' || style?.visibility === 'hidden') {
+      isSkipped = true;
+      break;
+    }
   }
-  return false;
+  for (const el of path) {
+    cache.set(el, isSkipped);
+  }
+  return isSkipped;
 }
 
 export function findMainContent(documentRoot: Document = document): HTMLElement {
@@ -23,10 +51,14 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+
+  // ⚡ Bolt: Cache DOM traversals for heavy TreeWalker parsing
+  const skipCache = new WeakMap<Element, boolean>();
+
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
+      if (!text.data.trim() || isSkippedElement(text.parentElement, skipCache)) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
