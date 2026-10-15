@@ -132,10 +132,14 @@ function formattedDate(timestamp: number): string {
 function emptyState(icon: string, title: string, description: string): HTMLElement {
   const element = document.createElement('div');
   element.className = 'empty-state';
-  element.innerHTML = `<div class="empty-state__face"></div><strong></strong><p></p>`;
-  element.querySelector('.empty-state__face')!.textContent = icon;
-  element.querySelector('strong')!.textContent = title;
-  element.querySelector('p')!.textContent = description;
+  const face = document.createElement('div');
+  face.className = 'empty-state__face';
+  face.textContent = icon;
+  const strong = document.createElement('strong');
+  strong.textContent = title;
+  const p = document.createElement('p');
+  p.textContent = description;
+  element.append(face, strong, p);
   return element;
 }
 
@@ -163,14 +167,27 @@ function renderHistory(): void {
   for (const entry of entries) {
     const card = document.createElement('article');
     card.className = 'item-card';
-    card.innerHTML = `
-      <div class="item-main"><p></p><span class="item-arrow">→</span><p></p></div>
-      <div class="item-meta"><span></span><div class="item-buttons"></div></div>`;
-    const paragraphs = card.querySelectorAll('p');
-    paragraphs[0]!.textContent = entry.original;
-    paragraphs[1]!.textContent = entry.translation;
-    card.querySelector<HTMLElement>('.item-meta > span')!.textContent = `${sourceLabel(entry)} · ${formattedDate(entry.createdAt)}`;
-    const buttons = card.querySelector<HTMLElement>('.item-buttons')!;
+    const main = document.createElement('div');
+    main.className = 'item-main';
+    const p1 = document.createElement('p');
+    p1.textContent = entry.original;
+    const arrow = document.createElement('span');
+    arrow.className = 'item-arrow';
+    arrow.textContent = '→';
+    const p2 = document.createElement('p');
+    p2.textContent = entry.translation;
+    main.append(p1, arrow, p2);
+
+    const meta = document.createElement('div');
+    meta.className = 'item-meta';
+    const span = document.createElement('span');
+    span.textContent = `${sourceLabel(entry)} · ${formattedDate(entry.createdAt)}`;
+    const buttons = document.createElement('div');
+    buttons.className = 'item-buttons';
+    meta.append(span, buttons);
+
+    card.append(main, meta);
+
     buttons.append(
       miniButton('♡ В словарь', async () => {
         const result = await repository.addDictionaryEntry(entry);
@@ -214,14 +231,27 @@ function renderDictionary(): void {
   for (const entry of entries) {
     const card = document.createElement('article');
     card.className = 'item-card';
-    card.innerHTML = `
-      <div class="item-main"><p></p><span class="item-arrow">→</span><p></p></div>
-      <div class="item-meta"><span></span><div class="item-buttons"></div></div>`;
-    const paragraphs = card.querySelectorAll('p');
-    paragraphs[0]!.textContent = entry.original;
-    paragraphs[1]!.textContent = entry.translation;
-    card.querySelector<HTMLElement>('.item-meta > span')!.textContent = entry.note || formattedDate(entry.updatedAt);
-    card.querySelector<HTMLElement>('.item-buttons')!.append(
+    const main = document.createElement('div');
+    main.className = 'item-main';
+    const p1 = document.createElement('p');
+    p1.textContent = entry.original;
+    const arrow = document.createElement('span');
+    arrow.className = 'item-arrow';
+    arrow.textContent = '→';
+    const p2 = document.createElement('p');
+    p2.textContent = entry.translation;
+    main.append(p1, arrow, p2);
+
+    const meta = document.createElement('div');
+    meta.className = 'item-meta';
+    const span = document.createElement('span');
+    span.textContent = entry.note || formattedDate(entry.updatedAt);
+    const buttons = document.createElement('div');
+    buttons.className = 'item-buttons';
+    meta.append(span, buttons);
+    card.append(main, meta);
+
+    buttons.append(
       miniButton('Изменить', () => openWordDialog(entry)),
       miniButton('Удалить', async () => {
         await repository.removeDictionaryEntry(entry.id);

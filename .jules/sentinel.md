@@ -1,0 +1,4 @@
+## 2025-02-12 - Replacing innerHTML with safe DOM APIs in Extensions
+**Vulnerability:** Found uses of `innerHTML` to assign content to popup, dynamic prompts, and card content in content script extensions. While in some cases this involved embedding a safe SVG, it could be repurposed by an attacker if user data ever touches `innerHTML` during refactoring.
+**Learning:** Chrome Extensions, specifically MV3 content scripts, have a higher privilege and impact if XSS occurs. Using `innerHTML` introduces unnecessary risk.
+**Prevention:** Avoid `innerHTML` entirely when creating or updating UI elements. Always use `document.createElement`, `replaceChildren`, and `append`. When inserting static SVG graphics, use `new DOMParser().parseFromString(..., 'image/svg+xml').documentElement` and append it.
