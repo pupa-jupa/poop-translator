@@ -1,0 +1,3 @@
+## 2024-05-24 - [DOM Traversal Bottlenecks in Translation]
+**Learning:** Checking `isSkippedElement` (which uses `getComputedStyle`) on a bottom-up per-text-node basis causes massive performance degradation on deep DOM trees (O(N*Depth)). Calling `getComputedStyle` repeatedly forces layout thrashing.
+**Action:** When walking the DOM to find translatable nodes, always use a top-down `TreeWalker` with `NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT`. Rejecting skipped elements (`NodeFilter.FILTER_REJECT`) cleanly prunes subtrees and calls `getComputedStyle` exactly once per evaluated element branch instead of N times. Don't forget to explicitly check the root node since `TreeWalker.acceptNode` doesn't evaluate the root.
