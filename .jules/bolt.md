@@ -1,0 +1,3 @@
+## 2025-02-19 - TreeWalker performance in large DOMs
+**Learning:** Checking node ancestors with `isSkippedElement` on every single text node in `TreeWalker` (`SHOW_TEXT`) leads to massive redundant iterations up the DOM tree (O(depth * text_nodes)). This is especially slow on large pages.
+**Action:** When filtering out large subtrees (e.g., hidden elements, script tags), combine `SHOW_ELEMENT | SHOW_TEXT` in the `TreeWalker`. When it hits an element that should be skipped, returning `NodeFilter.FILTER_REJECT` prevents the `TreeWalker` from ever visiting that element's descendants. This prunes entire subtrees early, drastically reducing redundant operations.
