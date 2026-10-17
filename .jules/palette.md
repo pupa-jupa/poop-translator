@@ -1,0 +1,3 @@
+## 2024-05-16 - Accessible Tooltips for Icon-only Buttons and ARIA Live for Translations
+**Learning:** Screen readers support `aria-label` nicely, but visual users relying on mouse navigation need `title` tooltips for icon-only buttons to discover their function, especially within a Chrome Extension where native tooltips improve perceived accessibility. Furthermore, dynamically populated translation results need `aria-live` to natively announce the outcome to screen reader users after fetching data without moving focus.
+**Action:** When creating generic icon-only buttons or interactive results containers, always ensure that `title` accompanies `aria-label`, and `aria-live="polite"` accompanies dynamic result wrappers in Vanilla HTML/DOM elements.
