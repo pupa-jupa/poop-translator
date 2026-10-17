@@ -77,10 +77,11 @@ function normalizedHistory(value: unknown): HistoryEntry[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is HistoryEntry => {
     if (!isRecord(entry)) return false;
+    // 🛡️ Sentinel: Add input length limits to prevent DoS via malicious file import
     return nonEmptyString(entry.id)
       && nonEmptyString(entry.requestId)
-      && nonEmptyString(entry.original)
-      && nonEmptyString(entry.translation)
+      && nonEmptyString(entry.original) && entry.original.length <= 10000
+      && nonEmptyString(entry.translation) && entry.translation.length <= 10000
       && nonEmptyString(entry.sourceLanguage)
       && isTargetLanguage(entry.targetLanguage)
       && ['manual', 'selection', 'context-menu', 'ocr-region'].includes(String(entry.source))
@@ -92,10 +93,11 @@ function normalizedDictionary(value: unknown): DictionaryEntry[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is DictionaryEntry => {
     if (!isRecord(entry)) return false;
+    // 🛡️ Sentinel: Add input length limits to prevent DoS via malicious file import
     return nonEmptyString(entry.id)
-      && nonEmptyString(entry.original)
-      && nonEmptyString(entry.translation)
-      && typeof entry.note === 'string'
+      && nonEmptyString(entry.original) && entry.original.length <= 500
+      && nonEmptyString(entry.translation) && entry.translation.length <= 500
+      && typeof entry.note === 'string' && entry.note.length <= 1000
       && typeof entry.createdAt === 'number'
       && typeof entry.updatedAt === 'number';
   });
