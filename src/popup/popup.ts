@@ -421,6 +421,7 @@ function createVariantButton(result: TranslationResult, variant: DictionaryVaria
   button.className = 'result-variant';
   button.type = 'button';
   button.setAttribute('aria-label', `Добавить «${variant.translation}» в словарь`);
+  button.setAttribute('title', `Добавить «${variant.translation}» в словарь`);
   const meaning = document.createElement('span');
   meaning.className = 'result-variant__meaning';
   meaning.textContent = variant.translation;
