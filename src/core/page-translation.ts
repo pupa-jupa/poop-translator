@@ -4,16 +4,46 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
+function isSkippedElement(element: Element | null, memo: WeakMap<Element, boolean>): boolean {
+  let current = element;
+  const path: Element[] = [];
+
+  while (current) {
+    if (memo.has(current)) {
+      const isSkipped = memo.get(current)!;
+      for (const el of path) memo.set(el, isSkipped);
+      return isSkipped;
+    }
+
+    path.push(current);
+
+    if (SKIPPED_TAGS.has(current.tagName)) {
+      for (const el of path) memo.set(el, true);
+      return true;
+    }
+    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') {
+      for (const el of path) memo.set(el, true);
+      return true;
+    }
+    if (current.hasAttribute('data-poop-translator-root')) {
+      for (const el of path) memo.set(el, true);
+      return true;
+    }
     const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
+    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) {
+      for (const el of path) memo.set(el, true);
+      return true;
+    }
     const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
+    if (style?.display === 'none' || style?.visibility === 'hidden') {
+      for (const el of path) memo.set(el, true);
+      return true;
+    }
+
+    current = current.parentElement;
   }
+
+  for (const el of path) memo.set(el, false);
   return false;
 }
 
@@ -23,10 +53,12 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+  const memo = new WeakMap<Element, boolean>();
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
+      // Memoize repetitive ancestor traversal checks to reduce O(depth) complexity to amortized O(1)
+      if (!text.data.trim() || isSkippedElement(text.parentElement, memo)) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });

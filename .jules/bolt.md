@@ -1,0 +1,3 @@
+## 2025-02-23 - DOM Traversal Memoization with WeakMap
+**Learning:** During heavy DOM manipulation (like iterating through large DOM trees with `TreeWalker`), repeatedly checking ancestors using `parentElement` recalculates `getComputedStyle` and other node attributes continuously for deeply nested elements, resulting in O(N * Depth) complexity.
+**Action:** Use a `WeakMap<Element, boolean>` to memoize these repetitive ancestor traversal checks, effectively reducing the complexity to an amortized O(1) per node and significantly speeding up DOM analysis.
