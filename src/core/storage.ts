@@ -38,8 +38,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function nonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
+function nonEmptyString(value: unknown, maxLength?: number): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && (maxLength === undefined || value.length <= maxLength);
 }
 
 function validTimestamp(value: unknown): value is number {
@@ -77,11 +77,11 @@ function normalizedHistory(value: unknown): HistoryEntry[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is HistoryEntry => {
     if (!isRecord(entry)) return false;
-    return nonEmptyString(entry.id)
-      && nonEmptyString(entry.requestId)
-      && nonEmptyString(entry.original)
-      && nonEmptyString(entry.translation)
-      && nonEmptyString(entry.sourceLanguage)
+    return nonEmptyString(entry.id, 100)
+      && nonEmptyString(entry.requestId, 100)
+      && nonEmptyString(entry.original, 200_000)
+      && nonEmptyString(entry.translation, 200_000)
+      && nonEmptyString(entry.sourceLanguage, 20)
       && isTargetLanguage(entry.targetLanguage)
       && ['manual', 'selection', 'context-menu', 'ocr-region'].includes(String(entry.source))
       && typeof entry.createdAt === 'number';
@@ -92,10 +92,10 @@ function normalizedDictionary(value: unknown): DictionaryEntry[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is DictionaryEntry => {
     if (!isRecord(entry)) return false;
-    return nonEmptyString(entry.id)
-      && nonEmptyString(entry.original)
-      && nonEmptyString(entry.translation)
-      && typeof entry.note === 'string'
+    return nonEmptyString(entry.id, 100)
+      && nonEmptyString(entry.original, 200_000)
+      && nonEmptyString(entry.translation, 200_000)
+      && typeof entry.note === 'string' && entry.note.length <= 200_000
       && typeof entry.createdAt === 'number'
       && typeof entry.updatedAt === 'number';
   });
@@ -106,7 +106,7 @@ function normalizedReview(value: unknown, dictionary: DictionaryEntry[]): Review
   const ids = new Set(dictionary.map((entry) => entry.id));
   const valid = new Map<string, ReviewProgress>();
   for (const item of value) {
-    if (!isRecord(item) || !nonEmptyString(item.dictionaryId) || !ids.has(item.dictionaryId)
+    if (!isRecord(item) || !nonEmptyString(item.dictionaryId, 100) || !ids.has(item.dictionaryId)
       || !validTimestamp(item.dueAt)
       || !validTimestamp(item.lastReviewedAt)
       || typeof item.streak !== 'number' || !Number.isInteger(item.streak)
