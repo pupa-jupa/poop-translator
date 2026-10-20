@@ -4,17 +4,35 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
+function isSkippedElement(element: Element | null, cache?: WeakMap<Element, boolean>): boolean {
+  if (!element) return false;
+
+  const path: Element[] = [];
+  let skipped = false;
+
+  for (let current: Element | null = element; current; current = current.parentElement) {
+    if (cache?.has(current)) {
+      skipped = cache.get(current)!;
+      break;
+    }
+    path.push(current);
+
+    if (SKIPPED_TAGS.has(current.tagName)) { skipped = true; break; }
+    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') { skipped = true; break; }
+    if (current.hasAttribute('data-poop-translator-root')) { skipped = true; break; }
+
     const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
+    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) { skipped = true; break; }
+
     const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
+    if (style?.display === 'none' || style?.visibility === 'hidden') { skipped = true; break; }
   }
-  return false;
+
+  for (const el of path) {
+    cache?.set(el, skipped);
+  }
+
+  return skipped;
 }
 
 export function findMainContent(documentRoot: Document = document): HTMLElement {
@@ -23,10 +41,12 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+  // Memoize repetitive ancestor checks during TreeWalker traversal to reduce amortized complexity to O(1)
+  const cache = new WeakMap<Element, boolean>();
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
+      if (!text.data.trim() || isSkippedElement(text.parentElement, cache)) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
