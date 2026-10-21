@@ -1,0 +1,4 @@
+## 2025-02-28 - Unbounded Strings in Storage Deserialization
+**Vulnerability:** The data deserialization functions (e.g., parsing imported backups) lacked explicit string length limits, risking Denial of Service (DoS) and storage quota exhaustion through maliciously crafted backup files.
+**Learning:** During import, while standard UI and message payloads constrained string lengths, the storage normalization functions implicitly trusted the payload structure and only verified string types, neglecting bounds checks.
+**Prevention:** Always enforce strict schema boundaries, including explicit maximum string lengths, during data normalization and deserialization (such as importing backup files) to mirror standard API/UI validation limits.
