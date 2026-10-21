@@ -4,17 +4,40 @@ const SKIPPED_TAGS = new Set([
   'SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'FORM', 'LABEL', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'BUTTON', 'SVG', 'CANVAS',
 ]);
 
-function isSkippedElement(element: Element | null): boolean {
-  for (let current = element; current; current = current.parentElement) {
-    if (SKIPPED_TAGS.has(current.tagName)) return true;
-    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') return true;
-    if (current.hasAttribute('data-poop-translator-root')) return true;
+// Memoize traversal results during TreeWalker processing.
+// This reduces the O(depth) complexity per node to amortized O(1),
+// preventing repeated getComputedStyle and attribute checks on the same ancestors.
+export function isSkippedElement(element: Element | null, memo?: WeakMap<Element, boolean>): boolean {
+  if (!element) return false;
+  if (memo?.has(element)) return memo.get(element)!;
+
+  let result = false;
+  let current: Element | null = element;
+
+  for (; current; current = current.parentElement) {
+    if (memo?.has(current)) {
+      result = memo.get(current)!;
+      break;
+    }
+    if (SKIPPED_TAGS.has(current.tagName)) { result = true; break; }
+    if (current.hasAttribute('hidden') || current.getAttribute('aria-hidden') === 'true') { result = true; break; }
+    if (current.hasAttribute('data-poop-translator-root')) { result = true; break; }
     const editable = current.getAttribute('contenteditable');
-    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) return true;
+    if ((current instanceof HTMLElement && current.isContentEditable) || (editable !== null && editable !== 'false')) { result = true; break; }
     const style = current instanceof HTMLElement ? getComputedStyle(current) : undefined;
-    if (style?.display === 'none' || style?.visibility === 'hidden') return true;
+    if (style?.display === 'none' || style?.visibility === 'hidden') { result = true; break; }
   }
-  return false;
+
+  // Backfill the memoization map for the traversed path
+  if (memo) {
+    for (let backfillNode: Element | null = element; backfillNode && backfillNode !== current?.parentElement; backfillNode = backfillNode.parentElement) {
+      if (!memo.has(backfillNode)) {
+        memo.set(backfillNode, result);
+      }
+    }
+  }
+
+  return result;
 }
 
 export function findMainContent(documentRoot: Document = document): HTMLElement {
@@ -23,10 +46,11 @@ export function findMainContent(documentRoot: Document = document): HTMLElement 
 
 export function collectTextNodes(root: Node): Text[] {
   const doc = root.ownerDocument ?? document;
+  const skippedMemo = new WeakMap<Element, boolean>();
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const text = node as Text;
-      if (!text.data.trim() || isSkippedElement(text.parentElement)) return NodeFilter.FILTER_REJECT;
+      if (!text.data.trim() || isSkippedElement(text.parentElement, skippedMemo)) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });

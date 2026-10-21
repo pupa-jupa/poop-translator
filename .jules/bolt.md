@@ -1,0 +1,3 @@
+## 2025-01-20 - Memoizing TreeWalker DOM Traversal
+**Learning:** In Vanilla DOM manipulations using `TreeWalker`, iterating over many text nodes (like translating a full page) can become severely CPU-bound if checking node validity (`isSkippedElement`) involves traversing the node's ancestors up to the document root on every check, especially when invoking expensive methods like `getComputedStyle`.
+**Action:** When evaluating thousands of text nodes that share common DOM ancestors, pass an optional `WeakMap<Element, boolean>` initialized *within the loop's execution context* to memoize the ancestor tree checks. This guarantees no stale cache on mutations while reducing O(depth) per-node complexity to an amortized O(1).
