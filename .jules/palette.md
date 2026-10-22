@@ -1,0 +1,3 @@
+## 2024-10-21 - Accessible Icon Buttons and Dynamic Content
+**Learning:** Icon-only buttons with `aria-label` are accessible to screen readers, but missing a visible tooltip (`title`) can leave sighted users confused about the icon's meaning. Additionally, dynamically updating containers (like history lists, search results) require `aria-live` to ensure screen readers announce changes when elements are added or replaced.
+**Action:** Always include a `title` attribute matching the `aria-label` for icon-only buttons. Add `aria-live="polite"` to parent containers of dynamically changing content blocks to broadcast updates gracefully.
