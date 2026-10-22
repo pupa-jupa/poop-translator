@@ -1,0 +1,4 @@
+## 2025-05-24 - DoS and Quota Exhaustion from Unbounded JSON Deserialization
+**Vulnerability:** The application was vulnerable to denial-of-service and storage quota exhaustion because `normalizedHistory`, `normalizedDictionary`, and `normalizedReview` deserialized extension state (such as during backup import) checking only if string fields were non-empty, but without enforcing any upper boundaries on their lengths.
+**Learning:** Checking for truthiness (`trim().length > 0`) is insufficient. When dealing with untrusted user input or imported backups, explicitly unbounded fields can be manipulated by malicious actors to consume excessive resources upon parsing or to blow past `chrome.storage.local` limits, breaking the extension.
+**Prevention:** Always enforce explicit schema boundaries on all imported/deserialized data, specifically maximum string lengths that match the UI bounds, to ensure data remains manageable and safe.
