@@ -172,6 +172,7 @@ function showSelectionButton(rect: DOMRect): void {
   button.type = 'button';
   button.className = 'pt-selection-button';
   button.setAttribute('aria-label', 'Перевести выделенный текст');
+  button.title = 'Перевести выделенный текст';
   button.innerHTML = poopSvg;
   const left = clamp(rect.right + 7, 8, window.innerWidth - 44);
   const top = clamp(rect.bottom + 5, 8, window.innerHeight - 44);
@@ -215,7 +216,7 @@ function cardShell(original: string, rect?: DOMRect): {
       <span class="pt-card-mark">${poopSvg}</span>
       <span class="pt-card-title">poop translator</span>
       <button class="pt-card-drag" type="button" aria-label="Переместить окно перевода" title="Переместить окно">⠿</button>
-      <button class="pt-icon-button" type="button" aria-label="Закрыть">✕</button>
+      <button class="pt-icon-button" type="button" aria-label="Закрыть" title="Закрыть">✕</button>
     </div>
     <p class="pt-label">Оригинал</p>
     <p class="pt-copy pt-original"></p>
