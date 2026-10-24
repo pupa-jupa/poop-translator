@@ -38,8 +38,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function nonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
+function nonEmptyString(value: unknown, maxLength = 200): value is string {
+  return typeof value === 'string' && value.length <= maxLength && value.trim().length > 0;
 }
 
 function validTimestamp(value: unknown): value is number {
@@ -77,11 +77,12 @@ function normalizedHistory(value: unknown): HistoryEntry[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is HistoryEntry => {
     if (!isRecord(entry)) return false;
-    return nonEmptyString(entry.id)
-      && nonEmptyString(entry.requestId)
-      && nonEmptyString(entry.original)
-      && nonEmptyString(entry.translation)
-      && nonEmptyString(entry.sourceLanguage)
+    // Enforce strict boundaries during parsing to prevent DoS via unbounded strings
+    return nonEmptyString(entry.id, 200)
+      && nonEmptyString(entry.requestId, 200)
+      && nonEmptyString(entry.original, 10_000)
+      && nonEmptyString(entry.translation, 10_000)
+      && nonEmptyString(entry.sourceLanguage, 200)
       && isTargetLanguage(entry.targetLanguage)
       && ['manual', 'selection', 'context-menu', 'ocr-region'].includes(String(entry.source))
       && typeof entry.createdAt === 'number';
@@ -92,10 +93,12 @@ function normalizedDictionary(value: unknown): DictionaryEntry[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is DictionaryEntry => {
     if (!isRecord(entry)) return false;
-    return nonEmptyString(entry.id)
-      && nonEmptyString(entry.original)
-      && nonEmptyString(entry.translation)
+    // Enforce strict boundaries during parsing to prevent DoS via unbounded strings
+    return nonEmptyString(entry.id, 200)
+      && nonEmptyString(entry.original, 500)
+      && nonEmptyString(entry.translation, 500)
       && typeof entry.note === 'string'
+      && entry.note.length <= 1_000
       && typeof entry.createdAt === 'number'
       && typeof entry.updatedAt === 'number';
   });
