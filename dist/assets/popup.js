@@ -144,7 +144,7 @@ import"./modulepreload-polyfill-B5Qt9EMX.js";import{s as jt,D as Vt,c as Jt,S as
 
     <dialog class="modal" data-word-modal>
       <form method="dialog" data-form="word">
-        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" type="submit">✕</button></div>
+        <div class="modal-head"><div><span class="section-kicker">Личный словарь</span><h2 data-word-modal-title>Новое слово</h2></div><button class="icon-button" value="cancel" aria-label="Закрыть" title="Закрыть" type="submit">✕</button></div>
         <input type="hidden" data-word-id>
         <label>Слово или фраза<input required maxlength="500" data-word-original></label>
         <label>Перевод<input required maxlength="500" data-word-translation></label>
