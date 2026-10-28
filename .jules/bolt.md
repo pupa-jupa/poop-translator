@@ -1,0 +1,3 @@
+## 2024-05-18 - Memoizing DOM ancestor traversal
+**Learning:** Checking DOM ancestor properties (like \`getComputedStyle\` or attributes) in a deep tree inside a loop like \`TreeWalker\` can be heavily optimized (from O(n) to O(1) per node amortized) by caching the results of whether an ancestor is skipped using a \`WeakMap\`. We must scope the map to the traversal context so it handles mutations fine, and we must record intermediate states to properly propagate cached decisions down the tree branches.
+**Action:** Use \`WeakMap<Element, boolean>\` localized to the \`TreeWalker\` when doing deep traversal path condition checks to avoid exponential-like performance penalties in deeply nested DOM structures.
