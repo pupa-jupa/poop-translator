@@ -1,0 +1,3 @@
+## 2024-05-24 - Memoizing TreeWalker DOM Traversal
+**Learning:** During heavy DOM manipulation (like TreeWalkers), repeating ancestor traversal checks (e.g., getComputedStyle) on every child node creates an O(depth) performance bottleneck.
+**Action:** Use a `WeakMap<Element, boolean>` instantiated inside the traversal lifecycle to memoize repetitive ancestor checks, collecting intermediate nodes in a path array to apply the result iteratively, thus reducing O(depth) to amortized O(1).
