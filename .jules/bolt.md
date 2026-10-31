@@ -1,0 +1,3 @@
+## 2025-02-18 - Memoizing DOM Ancestor Traversal Checks
+**Learning:** For performance optimizations during heavy DOM manipulation (like TreeWalkers), use a `WeakMap<Element, boolean>` to memoize repetitive ancestor traversal checks (e.g., `getComputedStyle` or attribute checks) to reduce O(depth) complexity to amortized O(1).
+**Action:** When implementing iterative memoization for DOM ancestor traversal checks, collect the traversed elements in an array path and apply the final boolean result to all elements in the path. Scope the map instance strictly to the execution lifecycle of the specific traversal (e.g., initialize it inside the function iterating over the DOM) to guarantee safety against stale caches if the DOM mutates later.
