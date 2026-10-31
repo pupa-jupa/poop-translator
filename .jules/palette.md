@@ -1,0 +1,3 @@
+## 2024-03-24 - Accessibility for dynamic elements and icon-only buttons
+**Learning:** The popup UI and injected content script UI rely heavily on dynamic status text (like engine loading state) and icon-only utility buttons (close, translate selection). Without `aria-live` on the dynamic statuses, screen reader users miss crucial background operations (like the local engine loading). Icon-only buttons lacking `title` attributes leave sighted users confused about their function, even if `aria-label` is present.
+**Action:** Always ensure that any container dynamically updating its text content for a meaningful process has `aria-live="polite"`. For all icon-only buttons, ensure both an `aria-label` (for screen readers) and a `title` (for sighted users) are present.
