@@ -8,7 +8,7 @@
       <span class="pt-card-mark">${st}</span>
       <span class="pt-card-title">poop translator</span>
       <button class="pt-card-drag" type="button" aria-label="Переместить окно перевода" title="Переместить окно">⠿</button>
-      <button class="pt-icon-button" type="button" aria-label="Закрыть">✕</button>
+      <button class="pt-icon-button" type="button" aria-label="Закрыть" title="Закрыть">✕</button>
     </div>
     <p class="pt-label">Оригинал</p>
     <p class="pt-copy pt-original"></p>
