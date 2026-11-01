@@ -1,0 +1,3 @@
+## 2024-05-18 - Memoizing DOM ancestor checks
+**Learning:** During page translation, checking `isSkippedElement` repeatedly on every text node's parent is an O(depth) operation per node, which can be very expensive (thousands of nodes). However, intermediate elements' skipped status is completely deterministic based on their tag, attributes, or ancestors.
+**Action:** Use a `WeakMap<Element, boolean>` scoped to the DOM traversal session to memoize whether an element or any of its ancestors should be skipped. When walking up the DOM tree, store the result in the `WeakMap` for all elements visited on that path.
