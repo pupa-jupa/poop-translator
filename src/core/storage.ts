@@ -42,6 +42,12 @@ function nonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function isString(value: unknown, maxLength: number, allowEmpty = false): value is string {
+  return typeof value === 'string'
+    && value.length <= maxLength
+    && (allowEmpty || value.trim().length > 0);
+}
+
 function validTimestamp(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
     && Number.isFinite(new Date(value).getTime());
@@ -79,8 +85,8 @@ function normalizedHistory(value: unknown): HistoryEntry[] {
     if (!isRecord(entry)) return false;
     return nonEmptyString(entry.id)
       && nonEmptyString(entry.requestId)
-      && nonEmptyString(entry.original)
-      && nonEmptyString(entry.translation)
+      && isString(entry.original, 10000)
+      && isString(entry.translation, 10000)
       && nonEmptyString(entry.sourceLanguage)
       && isTargetLanguage(entry.targetLanguage)
       && ['manual', 'selection', 'context-menu', 'ocr-region'].includes(String(entry.source))
@@ -93,9 +99,9 @@ function normalizedDictionary(value: unknown): DictionaryEntry[] {
   return value.filter((entry): entry is DictionaryEntry => {
     if (!isRecord(entry)) return false;
     return nonEmptyString(entry.id)
-      && nonEmptyString(entry.original)
-      && nonEmptyString(entry.translation)
-      && typeof entry.note === 'string'
+      && isString(entry.original, 500)
+      && isString(entry.translation, 500)
+      && isString(entry.note, 1000, true)
       && typeof entry.createdAt === 'number'
       && typeof entry.updatedAt === 'number';
   });
