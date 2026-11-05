@@ -1,0 +1,3 @@
+## YYYY-MM-DD - Memoizing DOM Traversal in TreeWalkers
+**Learning:** Heavy use of `getComputedStyle` and DOM traversal inside a `TreeWalker` can be extremely slow. Since many sibling text nodes share the same ancestors, recursively checking ancestors each time leads to redundant O(depth) work.
+**Action:** Use a `WeakMap<Element, boolean>` initialized before the `TreeWalker` loop to memoize the results of ancestor checks. Accumulate the traversed path in an array and apply the final result to all elements in the path to ensure children inherit the memoized states of their ancestors, reducing the checks to amortized O(1).
