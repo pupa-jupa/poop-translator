@@ -1,0 +1,3 @@
+## YYYY-MM-DD - [DOM Traversal Memoization]
+**Learning:** Using `WeakMap` to memoize DOM traversal operations in TreeWalkers reduces repetitive ancestor traversal checks from O(depth) to amortized O(1). Intermediate nodes must be collected in an array path and updated with the final boolean result, otherwise children won't correctly inherit the memoized states of their ancestors.
+**Action:** When performing heavy DOM manipulation or traversal that requires checking ancestor attributes or styles repeatedly, scope a `WeakMap` to the execution lifecycle of the iteration and iteratively update all intermediate nodes in the path to ensure safe and efficient memoization against stale caches.
